@@ -1,11 +1,16 @@
-"""Audio transcription via Groq Whisper API.
+"""Audio transcription via Groq Whisper API + yt-dlp for audio download.
 
 Primary: Groq Whisper (fast, high quality, free 10h/month)
 Fallback: Browser Whisper.js (handled by frontend, no server dependency)
+
+Note: yt-dlp download_youtube_audio is available but NOT auto-triggered
+from /api/analyze — datacenter IPs get banned by YouTube.
+Used only via explicit /api/youtube-audio/{video_id} endpoint.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import tempfile
 from pathlib import Path
@@ -50,3 +55,40 @@ async def transcribe_with_groq(audio_data: bytes, filename: str = "audio.mp3") -
         return {"text": text, "source": "groq_whisper", "language": data.get("language", "unknown")}
     finally:
         tmp.unlink(missing_ok=True)
+
+
+async def download_youtube_audio(video_id: str) -> Path:
+    """Download audio from YouTube via yt-dlp (fast, reliable).
+
+    Warning: may fail on datacenter IPs (YouTube blocks them).
+    """
+    def _download():
+        import yt_dlp
+
+        tmp_dir = tempfile.mkdtemp(prefix="podmemory_")
+        output_path = str(Path(tmp_dir) / "audio.%(ext)s")
+
+        ydl_opts = {
+            "format": "bestaudio[ext=m4a]/bestaudio/best",
+            "outtmpl": output_path,
+            "quiet": True,
+            "no_warnings": True,
+            "extract_flat": False,
+            "socket_timeout": 30,
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(
+                f"https://www.youtube.com/watch?v={video_id}",
+                download=True,
+            )
+            filename = ydl.prepare_filename(info)
+            result = Path(filename)
+            if not result.exists():
+                for f in Path(tmp_dir).iterdir():
+                    if f.is_file():
+                        return f
+                raise RuntimeError("Download completed but file not found")
+            return result
+
+    return await asyncio.to_thread(_download)

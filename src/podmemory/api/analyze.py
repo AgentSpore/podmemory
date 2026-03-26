@@ -3,6 +3,7 @@ import time
 
 import httpx
 from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi.responses import FileResponse
 
 from ..core.config import settings
 from ..schemas.analysis import AnalyzeRequest, AnalysisResponse
@@ -12,7 +13,7 @@ from ..services.transcript import (
     get_youtube_transcript,
     from_user_paste,
 )
-from ..services.audio_transcript import transcribe_with_groq
+from ..services.audio_transcript import transcribe_with_groq, download_youtube_audio
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,20 @@ async def get_config():
         "models": models,
         "has_api_key": bool(settings.openrouter_api_key),
     }
+
+
+@router.get("/youtube-audio/{video_id}")
+async def get_youtube_audio(video_id: str):
+    """Download audio from YouTube via yt-dlp.
+
+    Not auto-triggered from /analyze — datacenter IPs get banned.
+    Available as explicit endpoint for frontend fallback.
+    """
+    try:
+        audio_path = await download_youtube_audio(video_id)
+        return FileResponse(audio_path, media_type="audio/mp4", filename=f"{video_id}.m4a")
+    except Exception as e:
+        raise HTTPException(502, f"Failed to download audio: {e}")
 
 
 @router.post("/transcribe")
