@@ -917,11 +917,11 @@ nav {
 
     <div class="or-divider" data-i18n="orFile">or drop any audio / video file</div>
 
-    <div id="dropZone" style="border:2.5px dashed var(--border-light);padding:28px 20px;text-align:center;cursor:pointer;transition:all 0.15s">
-      <input type="file" id="fileInput" accept="audio/*,video/*,.mp3,.mp4,.m4a,.webm,.ogg,.wav,.mov" hidden>
+    <input type="file" id="fileInput" accept="audio/*,video/*,.mp3,.mp4,.m4a,.webm,.ogg,.wav,.mov" style="display:none">
+    <label for="fileInput" id="dropZone" style="display:block;border:2.5px dashed var(--border-light);padding:28px 20px;text-align:center;cursor:pointer;transition:all 0.15s">
       <p style="font-size:0.92rem;color:var(--text2)" data-i18n="dropText">Drop file here or <span style="color:var(--accent);font-weight:700;text-decoration:underline">browse</span></p>
       <p style="font-family:var(--font-mono);font-size:0.65rem;color:var(--text3);margin-top:6px" data-i18n="dropFormats">MP3, MP4, WAV, WebM, M4A, OGG — auto-transcribed in your browser</p>
-    </div>
+    </label>
     <div id="fileStatus" style="display:none;margin-top:8px;padding:10px 14px;background:var(--surface2);border:1.5px solid var(--border-light)">
       <p id="fileStatusText" style="font-family:var(--font-mono);font-size:0.78rem;color:var(--text)"></p>
       <div id="whisperProgress" style="display:none;margin-top:8px">
@@ -931,6 +931,15 @@ nav {
     </div>
 
     <textarea id="transcriptInput" hidden></textarea>
+
+    <div id="reviewBlock" style="display:none;margin-top:12px">
+      <label class="field-label" data-i18n="reviewLabel">Review transcript (edit if needed)</label>
+      <textarea id="reviewText" rows="6" style="width:100%;padding:12px 14px;background:var(--surface);border:var(--border-w) solid var(--border);color:var(--text);font-family:var(--font-body);font-size:0.82rem;outline:none;resize:vertical;box-shadow:var(--shadow-sm);margin-bottom:8px"></textarea>
+      <div style="display:flex;gap:8px">
+        <button class="action-btn primary" id="confirmTranscript" style="flex:1" data-i18n="confirmAnalyze">Confirm & Analyze →</button>
+        <button class="action-btn" id="cancelTranscript" style="flex:0 0 auto" data-i18n="cancel">Cancel</button>
+      </div>
+    </div>
 
     <div class="model-row">
       <span class="field-label" style="margin:0" data-i18n="modelLabel">Model</span>
@@ -1056,6 +1065,9 @@ const I18N = {
     save: 'Save', quiz: 'Quiz',
     reviewed: 'Reviewed', correct: 'Correct', accuracy: 'Accuracy',
     cards: 'cards', back: '\u2190 Back',
+    reviewLabel: 'Review transcript (edit if needed)',
+    confirmAnalyze: 'Confirm & Analyze \u2192',
+    cancel: 'Cancel',
   },
   ru: {
     heroTag: '\u0418\u0437\u0432\u043b\u0435\u0447\u0435\u043d\u0438\u0435 \u0437\u043d\u0430\u043d\u0438\u0439 \u0441 \u043f\u043e\u043c\u043e\u0449\u044c\u044e AI',
@@ -1089,6 +1101,9 @@ const I18N = {
     save: '\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c', quiz: '\u041a\u0432\u0438\u0437',
     reviewed: '\u041f\u0440\u043e\u0441\u043c\u043e\u0442\u0440\u0435\u043d\u043e', correct: '\u0412\u0435\u0440\u043d\u043e', accuracy: '\u0422\u043e\u0447\u043d\u043e\u0441\u0442\u044c',
     cards: '\u043a\u0430\u0440\u0442\u043e\u0447\u0435\u043a', back: '\u2190 \u041d\u0430\u0437\u0430\u0434',
+    reviewLabel: '\u041f\u0440\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u0442\u0440\u0430\u043d\u0441\u043a\u0440\u0438\u043f\u0442 (\u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u0443\u0439\u0442\u0435 \u043f\u0440\u0438 \u043d\u0435\u043e\u0431\u0445\u043e\u0434\u0438\u043c\u043e\u0441\u0442\u0438)',
+    confirmAnalyze: '\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c \u0438 \u0430\u043d\u0430\u043b\u0438\u0437\u0438\u0440\u043e\u0432\u0430\u0442\u044c \u2192',
+    cancel: '\u041e\u0442\u043c\u0435\u043d\u0430',
   },
   zh: {
     heroTag: 'AI\u9a71\u52a8\u7684\u77e5\u8bc6\u63d0\u53d6',
@@ -1122,6 +1137,9 @@ const I18N = {
     save: '\u4fdd\u5b58', quiz: '\u6d4b\u9a8c',
     reviewed: '\u5df2\u590d\u4e60', correct: '\u6b63\u786e', accuracy: '\u51c6\u786e\u7387',
     cards: '\u5361\u7247', back: '\u2190 \u8fd4\u56de',
+    reviewLabel: '\u68c0\u67e5\u8f6c\u5f55\u6587\u672c\uff08\u53ef\u7f16\u8f91\uff09',
+    confirmAnalyze: '\u786e\u8ba4\u5e76\u5206\u6790 \u2192',
+    cancel: '\u53d6\u6d88',
   }
 };
 
@@ -1221,7 +1239,7 @@ const fileInput = document.getElementById('fileInput');
 const fileStatus = document.getElementById('fileStatus');
 const fileStatusText = document.getElementById('fileStatusText');
 
-dropZone.onclick = () => fileInput.click();
+// Label for="fileInput" handles click natively — no JS needed for open
 dropZone.ondragover = e => { e.preventDefault(); dropZone.style.borderColor = 'var(--accent)'; dropZone.style.background = 'var(--highlight)'; };
 dropZone.ondragleave = () => { dropZone.style.borderColor = ''; dropZone.style.background = ''; };
 dropZone.ondrop = e => {
@@ -1239,42 +1257,59 @@ function selectFile(file) {
   document.getElementById('whisperProgress').style.display = 'none';
 }
 
-async function transcribeWithWhisper() {
+async function transcribeFile() {
   if (!uploadedFile) return null;
-  if (fileTranscript) return fileTranscript; // cached
+  if (fileTranscript) return fileTranscript;
 
   const progress = document.getElementById('whisperProgress');
   const bar = document.getElementById('whisperBar');
   const statusTxt = document.getElementById('whisperStatusText');
   progress.style.display = '';
 
+  // 1. Try Groq Whisper (fast, high quality)
   try {
-    // Step 1: Load Whisper model
-    statusTxt.textContent = 'Loading AI model (first time: ~50MB download, then cached)...';
-    bar.style.width = '10%';
+    statusTxt.textContent = 'Transcribing with Groq Whisper...';
+    bar.style.width = '50%';
+    const form = new FormData();
+    form.append('file', uploadedFile);
+    const resp = await fetch('/api/transcribe', { method: 'POST', body: form });
+    if (resp.ok) {
+      const data = await resp.json();
+      bar.style.width = '100%';
+      statusTxt.textContent = 'Transcribed via Groq Whisper';
+      fileTranscript = data.text;
+      fileStatusText.textContent = uploadedFile.name + ' — ' + data.text.length + ' chars (Groq)';
+      return showTranscriptReview(data.text);
+    }
+    // 503 = Groq unavailable/rate limit — fall through to Whisper.js
+    statusTxt.textContent = 'Groq unavailable, switching to browser transcription...';
+  } catch { /* fall through */ }
+
+  // 2. Fallback: Whisper.js small in browser
+  try {
+    statusTxt.textContent = 'Loading Whisper AI model (~240MB first time, cached after)...';
+    bar.style.width = '15%';
 
     if (!window._whisperPipeline) {
       const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.4.1');
       window._whisperPipeline = await pipeline(
         'automatic-speech-recognition',
-        'onnx-community/whisper-base',
+        'onnx-community/whisper-small',
         { dtype: 'q8' }
       );
     }
     bar.style.width = '30%';
     statusTxt.textContent = 'Decoding audio...';
 
-    // Step 2: Read file as AudioBuffer
     const arrayBuf = await uploadedFile.arrayBuffer();
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
     const audioBuf = await audioCtx.decodeAudioData(arrayBuf);
-    const audioData = audioBuf.getChannelData(0); // mono, 16kHz
+    const audioData = audioBuf.getChannelData(0);
     audioCtx.close();
 
     bar.style.width = '40%';
-    statusTxt.textContent = 'Transcribing (' + Math.round(audioBuf.duration) + 's audio)... This may take 1-3 minutes.';
+    statusTxt.textContent = 'Transcribing in browser (' + Math.round(audioBuf.duration) + 's)... may take 3-5 min';
 
-    // Step 3: Transcribe
     const result = await window._whisperPipeline(audioData, {
       chunk_length_s: 30,
       stride_length_s: 5,
@@ -1282,14 +1317,34 @@ async function transcribeWithWhisper() {
     });
 
     bar.style.width = '100%';
-    statusTxt.textContent = 'Transcription complete!';
+    statusTxt.textContent = 'Transcription complete (browser)';
     fileTranscript = result.text;
-    fileStatusText.textContent = uploadedFile.name + ' — transcribed (' + result.text.length + ' chars)';
-    return result.text;
+    fileStatusText.textContent = uploadedFile.name + ' — ' + result.text.length + ' chars (local)';
+    return showTranscriptReview(result.text);
   } catch (e) {
     statusTxt.textContent = 'Error: ' + e.message;
     throw e;
   }
+}
+
+// ─── Transcript Review ───
+function showTranscriptReview(text) {
+  return new Promise((resolve, reject) => {
+    const block = document.getElementById('reviewBlock');
+    const textarea = document.getElementById('reviewText');
+    textarea.value = text;
+    block.style.display = '';
+    textarea.focus();
+
+    document.getElementById('confirmTranscript').onclick = () => {
+      block.style.display = 'none';
+      resolve(textarea.value.trim());
+    };
+    document.getElementById('cancelTranscript').onclick = () => {
+      block.style.display = 'none';
+      reject(new Error('Cancelled'));
+    };
+  });
 }
 
 // ─── Analyze ───
@@ -1306,7 +1361,7 @@ async function analyze() {
     btn.classList.add('loading');
     btn.disabled = true;
     try {
-      text = await transcribeWithWhisper();
+      text = await transcribeFile();
       if (!text) { btn.classList.remove('loading'); btn.disabled = false; return toast('Transcription failed', 'error'); }
     } catch (e) { btn.classList.remove('loading'); btn.disabled = false; return toast('Transcription error: ' + e.message, 'error'); }
     btn.classList.remove('loading');
@@ -1369,9 +1424,11 @@ async function analyze() {
           const result = await window._whisperPipeline(audioData, { chunk_length_s: 30, stride_length_s: 5 });
           bar.style.width = '100%';
           wsTxt.textContent = 'Transcription complete!';
-          text = result.text;
 
-          // Re-send with transcript text
+          // Show transcript for review before analysis
+          text = await showTranscriptReview(result.text);
+
+          // Re-send with reviewed transcript text
           resp = await fetch('/api/analyze', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

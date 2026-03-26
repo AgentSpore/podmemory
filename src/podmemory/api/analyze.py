@@ -1,7 +1,7 @@
 import time
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 
 from ..core.config import settings
@@ -13,7 +13,7 @@ from ..services.transcript import (
     get_youtube_transcript,
     from_user_paste,
 )
-from ..services.audio_transcript import download_youtube_audio
+from ..services.audio_transcript import download_youtube_audio, transcribe_with_groq
 
 router = APIRouter(prefix="/api", tags=["analysis"])
 
@@ -66,18 +66,32 @@ async def get_config():
 
 @router.get("/youtube-audio/{video_id}")
 async def get_youtube_audio(video_id: str):
-    """Download audio from YouTube for client-side Whisper.js transcription.
-    Used as fallback when subtitles are unavailable.
-    """
+    """Download audio from YouTube. Used for fallback transcription."""
     try:
         audio_path = await download_youtube_audio(video_id)
-        return FileResponse(
-            audio_path,
-            media_type="audio/mp4",
-            filename=f"{video_id}.m4a",
-        )
+        return FileResponse(audio_path, media_type="audio/mp4", filename=f"{video_id}.m4a")
     except Exception as e:
         raise HTTPException(502, f"Failed to download audio: {e}")
+
+
+@router.post("/transcribe")
+async def transcribe_audio(file: UploadFile = File(...)):
+    """Transcribe audio via Groq Whisper (primary). Returns {text, source}."""
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "Empty file")
+    if len(data) > 25 * 1024 * 1024:
+        raise HTTPException(400, "File too large (max 25MB)")
+    try:
+        result = await transcribe_with_groq(data, file.filename or "audio.mp3")
+        return {"text": result["text"], "source": result["source"]}
+    except RuntimeError as e:
+        msg = str(e)
+        if msg == "NO_GROQ_KEY":
+            raise HTTPException(503, "GROQ_UNAVAILABLE")
+        if msg == "GROQ_RATE_LIMIT":
+            raise HTTPException(503, "GROQ_RATE_LIMIT")
+        raise HTTPException(502, msg)
 
 
 @router.post("/analyze", response_model=AnalysisResponse)

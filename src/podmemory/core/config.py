@@ -5,13 +5,11 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     app_name: str = "PodMemory"
     debug: bool = False
-    openrouter_api_key: str = ""
-    llm_model: str = "google/gemma-3-4b-it:free"
+    openrouter_api_key: str = os.environ.get("OPENROUTER_API_KEY", "")
+    groq_api_key: str = os.environ.get("GROQ_API_KEY", "")
+    llm_model: str = "nvidia/nemotron-3-nano-30b-a3b:free"
 
     model_config = {"env_prefix": "PM_"}
 
 
 settings = Settings()
-
-if not settings.openrouter_api_key:
-    settings.openrouter_api_key = os.environ.get("OPENROUTER_API_KEY", "")

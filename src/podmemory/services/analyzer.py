@@ -17,8 +17,9 @@ Rules:
 - LANGUAGE: Detect the language of the transcript. Write ALL output in that SAME language.
 - Be precise, analytical, and thorough
 - Flashcards should test understanding, not just recall
-- Timestamps should reference the original video timing
+- Timestamps MUST be within the actual video duration (provided below). Do NOT invent timestamps beyond the video length. If video is short (under 60s), use fewer timestamps or omit them.
 - Action items should be concrete and actionable
+- Scale output to content length: short transcripts get fewer insights/cards, long ones get more
 
 Return ONLY valid JSON (no markdown fences):
 {
@@ -67,10 +68,23 @@ async def analyze_transcript(transcript: Transcript, model: str = "") -> dict:
     if len(text) > 15000:
         text = text[:15000] + "\n\n[Transcript truncated at 15000 characters]"
 
+    # Estimate duration from segments or text length
+    duration_sec = 0
+    if transcript.segments:
+        last = transcript.segments[-1]
+        duration_sec = int(last.get("start", 0)) + 10
+    if not duration_sec:
+        duration_sec = max(10, len(transcript.text) // 15)  # ~15 chars per second speech
+
+    duration_str = f"{duration_sec // 60}:{duration_sec % 60:02d}"
+
     user_prompt = f"""Analyze this video transcript and extract knowledge:
 
 Transcript source: {transcript.source}
 Language: {transcript.language}
+Video duration: {duration_str} ({duration_sec} seconds)
+
+IMPORTANT: All timestamps must be between 0:00 and {duration_str}. Do not generate timestamps beyond the video duration.
 
 ---
 {text}
