@@ -899,6 +899,7 @@ nav {
   <header>
     <div class="logo">Pod<em>Memory</em></div>
     <div class="header-actions">
+      <button class="icon-btn" id="langToggle" title="Language" style="font-family:var(--font-mono);font-size:0.7rem;font-weight:700;width:auto;padding:0 10px">EN</button>
       <button class="icon-btn" id="themeToggle" title="Toggle theme">
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="10" r="4"/><path d="M10 2v2m0 12v2M2 10h2m12 0h2m-3.5-5.5L13 6m-6 8-1.5 1.5m9-1.5L13 14M6 6 4.5 4.5"/></svg>
       </button>
@@ -907,19 +908,19 @@ nav {
 
   <!-- ════ ANALYZE ════ -->
   <section id="screenAnalyze" class="screen active">
-    <span class="hero-tag">AI-Powered Knowledge Extraction</span>
-    <h1 class="hero-title">Remember<br><mark>everything</mark><br>you watch</h1>
-    <p class="hero-sub">YouTube link or any audio/video file. AI extracts insights, generates flashcards, and helps you remember with spaced repetition.</p>
+    <span class="hero-tag" data-i18n="heroTag">AI-Powered Knowledge Extraction</span>
+    <h1 class="hero-title" data-i18n="heroTitle">Remember<br><mark>everything</mark><br>you watch</h1>
+    <p class="hero-sub" data-i18n="heroSub">YouTube link or any audio/video file. AI extracts insights, generates flashcards, and helps you remember with spaced repetition.</p>
 
-    <label class="field-label">YouTube URL</label>
-    <input type="text" class="url-input" id="urlInput" placeholder="youtube.com/watch?v=..." autocomplete="off" spellcheck="false">
+    <label class="field-label" data-i18n="urlLabel">YouTube URL</label>
+    <input type="text" class="url-input" id="urlInput" data-i18n-placeholder="urlPlaceholder" placeholder="youtube.com/watch?v=..." autocomplete="off" spellcheck="false">
 
-    <div class="or-divider">or drop any audio / video file</div>
+    <div class="or-divider" data-i18n="orFile">or drop any audio / video file</div>
 
     <div id="dropZone" style="border:2.5px dashed var(--border-light);padding:28px 20px;text-align:center;cursor:pointer;transition:all 0.15s">
       <input type="file" id="fileInput" accept="audio/*,video/*,.mp3,.mp4,.m4a,.webm,.ogg,.wav,.mov" hidden>
-      <p style="font-size:0.92rem;color:var(--text2)">Drop file here or <span style="color:var(--accent);font-weight:700;text-decoration:underline">browse</span></p>
-      <p style="font-family:var(--font-mono);font-size:0.65rem;color:var(--text3);margin-top:6px">MP3, MP4, WAV, WebM, M4A, OGG — auto-transcribed in your browser</p>
+      <p style="font-size:0.92rem;color:var(--text2)" data-i18n="dropText">Drop file here or <span style="color:var(--accent);font-weight:700;text-decoration:underline">browse</span></p>
+      <p style="font-family:var(--font-mono);font-size:0.65rem;color:var(--text3);margin-top:6px" data-i18n="dropFormats">MP3, MP4, WAV, WebM, M4A, OGG — auto-transcribed in your browser</p>
     </div>
     <div id="fileStatus" style="display:none;margin-top:8px;padding:10px 14px;background:var(--surface2);border:1.5px solid var(--border-light)">
       <p id="fileStatusText" style="font-family:var(--font-mono);font-size:0.78rem;color:var(--text)"></p>
@@ -932,13 +933,13 @@ nav {
     <textarea id="transcriptInput" hidden></textarea>
 
     <div class="model-row">
-      <span class="field-label" style="margin:0">Model</span>
+      <span class="field-label" style="margin:0" data-i18n="modelLabel">Model</span>
       <select class="model-select" id="modelSelect"><option>Loading...</option></select>
     </div>
 
     <button class="analyze-btn" id="analyzeBtn">
-      <span class="btn-text">Analyze →</span>
-      <span class="btn-loading"><span class="spinner"></span> Extracting knowledge...</span>
+      <span class="btn-text" data-i18n="analyzeBtn">Analyze →</span>
+      <span class="btn-loading"><span class="spinner"></span> <span data-i18n="analyzing">Extracting knowledge...</span></span>
     </button>
 
     <div class="results" id="results"></div>
@@ -946,15 +947,15 @@ nav {
 
   <!-- ════ LIBRARY ════ -->
   <section id="screenLibrary" class="screen">
-    <h1 class="library-title">Library</h1>
+    <h1 class="library-title" data-i18n="library">Library</h1>
     <div class="search-wrap">
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="9" r="5"/><path d="M13 13l4 4"/></svg>
-      <input type="text" class="library-search" id="librarySearch" placeholder="Search by title or tags...">
+      <input type="text" class="library-search" id="librarySearch" data-i18n-placeholder="searchPlaceholder" placeholder="Search by title or tags...">
     </div>
     <div class="library-grid" id="libraryGrid"></div>
     <div class="library-actions">
-      <button class="action-btn" id="exportBtn"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 3v10m-3-3l3 3 3-3M4 14v2h12v-2"/></svg>Export</button>
-      <button class="action-btn" id="importBtn"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 13V3m3 3l-3-3-3 3M4 14v2h12v-2"/></svg>Import</button>
+      <button class="action-btn" id="exportBtn"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 3v10m-3-3l3 3 3-3M4 14v2h12v-2"/></svg><span data-i18n="export">Export</span></button>
+      <button class="action-btn" id="importBtn"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 13V3m3 3l-3-3-3 3M4 14v2h12v-2"/></svg><span data-i18n="import">Import</span></button>
       <input type="file" id="importFile" accept=".json" hidden>
     </div>
   </section>
@@ -974,17 +975,17 @@ nav {
         <div class="quiz-card-question" id="quizQ"></div>
         <div class="quiz-card-answer" id="quizA"></div>
       </div>
-      <p class="quiz-hint" id="quizHint">tap card to reveal answer</p>
+      <p class="quiz-hint" id="quizHint" data-i18n="quizHint">tap card to reveal answer</p>
       <div class="quiz-ratings" id="quizRatings">
-        <button class="rate-btn" data-quality="0">Again<span class="rate-key">1</span></button>
-        <button class="rate-btn" data-quality="2">Hard<span class="rate-key">2</span></button>
-        <button class="rate-btn" data-quality="3">Good<span class="rate-key">3</span></button>
-        <button class="rate-btn" data-quality="5">Easy<span class="rate-key">4</span></button>
+        <button class="rate-btn" data-quality="0"><span data-i18n="again">Again</span><span class="rate-key">1</span></button>
+        <button class="rate-btn" data-quality="2"><span data-i18n="hard">Hard</span><span class="rate-key">2</span></button>
+        <button class="rate-btn" data-quality="3"><span data-i18n="good">Good</span><span class="rate-key">3</span></button>
+        <button class="rate-btn" data-quality="5"><span data-i18n="easy">Easy</span><span class="rate-key">4</span></button>
       </div>
     </div>
     <div class="quiz-complete" id="quizComplete">
-      <h2>Done!</h2>
-      <p style="color:var(--text2)">Session complete. Here are your stats:</p>
+      <h2 data-i18n="done">Done!</h2>
+      <p style="color:var(--text2)" data-i18n="sessionComplete">Session complete. Here are your stats:</p>
       <div class="quiz-stats">
         <div><div class="quiz-stat-value" id="statReviewed">0</div><div class="quiz-stat-label">Reviewed</div></div>
         <div><div class="quiz-stat-value" id="statCorrect">0</div><div class="quiz-stat-label">Correct</div></div>
@@ -993,23 +994,23 @@ nav {
       <button class="action-btn primary" onclick="switchTab('analyze')" style="max-width:200px;margin:0 auto">← Back</button>
     </div>
     <div class="empty-state" id="quizEmpty">
-      <h3>No cards due</h3>
-      <p>Analyze a video and save it to start learning.</p>
+      <h3 data-i18n="noCards">No cards due</h3>
+      <p data-i18n="noCardsHint">Analyze a video and save it to start learning.</p>
     </div>
   </section>
 
   <nav>
     <button class="tab active" data-tab="analyze" onclick="switchTab('analyze')">
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="9" r="5"/><path d="M13 13l4 4"/></svg>
-      <span>Analyze</span>
+      <span data-i18n="tabAnalyze">Analyze</span>
     </button>
     <button class="tab" data-tab="library" onclick="switchTab('library')">
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5h14M3 5v10a2 2 0 002 2h10a2 2 0 002-2V5M8 5V3h4v2"/></svg>
-      <span>Library</span>
+      <span data-i18n="tabLibrary">Library</span>
     </button>
     <button class="tab" data-tab="quiz" onclick="switchTab('quiz')">
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 2a6 6 0 00-2 11.65V16a2 2 0 004 0v-2.35A6 6 0 0010 2z"/></svg>
-      <span>Quiz</span>
+      <span data-i18n="tabQuiz">Quiz</span>
       <span class="tab-badge" id="quizBadge">0</span>
     </button>
   </nav>
@@ -1018,6 +1019,140 @@ nav {
 </div>
 
 <script>
+// ─── i18n ───
+const LANGS = ['en', 'ru', 'zh'];
+const LANG_LABELS = { en: 'EN', ru: 'RU', zh: 'CN' };
+
+const I18N = {
+  en: {
+    heroTag: 'AI-Powered Knowledge Extraction',
+    heroTitle: 'Remember<br><mark>everything</mark><br>you watch',
+    heroSub: 'YouTube link or any audio/video file. AI extracts insights, generates flashcards, and helps you remember with spaced repetition.',
+    urlLabel: 'YouTube URL',
+    urlPlaceholder: 'youtube.com/watch?v=...',
+    orFile: 'or drop any audio / video file',
+    dropText: 'Drop file here or <span style="color:var(--accent);font-weight:700;text-decoration:underline">browse</span>',
+    dropFormats: 'MP3, MP4, WAV, WebM, M4A, OGG — auto-transcribed in your browser',
+    orPaste: 'or paste transcript',
+    modelLabel: 'Model',
+    analyzeBtn: 'Analyze \u2192',
+    analyzing: 'Extracting knowledge...',
+    library: 'Library',
+    searchPlaceholder: 'Search by title or tags...',
+    export: 'Export',
+    import: 'Import',
+    quizHint: 'tap card to reveal answer',
+    again: 'Again', hard: 'Hard', good: 'Good', easy: 'Easy',
+    done: 'Done!',
+    sessionComplete: 'Session complete. Here are your stats:',
+    noCards: 'No cards due',
+    noCardsHint: 'Analyze a video and save it to start learning.',
+    tabAnalyze: 'Analyze', tabLibrary: 'Library', tabQuiz: 'Quiz',
+    emptyLib: 'Empty library', emptyLibHint: 'Analyze a video to get started.',
+    noMatches: 'No matches', noMatchesHint: 'Try another search',
+    saved: 'Saved!', deleted: 'Deleted', exported: 'Exported!',
+    analysisComplete: 'Analysis complete!',
+    pastePrompt: 'Paste a YouTube URL or drop an audio/video file',
+    save: 'Save', quiz: 'Quiz',
+    reviewed: 'Reviewed', correct: 'Correct', accuracy: 'Accuracy',
+    cards: 'cards', back: '\u2190 Back',
+  },
+  ru: {
+    heroTag: '\u0418\u0437\u0432\u043b\u0435\u0447\u0435\u043d\u0438\u0435 \u0437\u043d\u0430\u043d\u0438\u0439 \u0441 \u043f\u043e\u043c\u043e\u0449\u044c\u044e AI',
+    heroTitle: '\u0417\u0430\u043f\u043e\u043c\u043d\u0438<br><mark>\u0432\u0441\u0451</mark><br>\u0447\u0442\u043e \u0441\u043c\u043e\u0442\u0440\u0438\u0448\u044c',
+    heroSub: '\u0421\u0441\u044b\u043b\u043a\u0430 \u043d\u0430 YouTube \u0438\u043b\u0438 \u043b\u044e\u0431\u043e\u0439 \u0430\u0443\u0434\u0438\u043e/\u0432\u0438\u0434\u0435\u043e \u0444\u0430\u0439\u043b. AI \u0438\u0437\u0432\u043b\u0435\u043a\u0430\u0435\u0442 \u043a\u043b\u044e\u0447\u0435\u0432\u044b\u0435 \u0438\u0434\u0435\u0438, \u0441\u043e\u0437\u0434\u0430\u0451\u0442 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0438 \u0438 \u043f\u043e\u043c\u043e\u0433\u0430\u0435\u0442 \u0437\u0430\u043f\u043e\u043c\u043d\u0438\u0442\u044c \u0441 \u043f\u043e\u043c\u043e\u0449\u044c\u044e \u0438\u043d\u0442\u0435\u0440\u0432\u0430\u043b\u044c\u043d\u043e\u0433\u043e \u043f\u043e\u0432\u0442\u043e\u0440\u0435\u043d\u0438\u044f.',
+    urlLabel: '\u0421\u0441\u044b\u043b\u043a\u0430 YouTube',
+    urlPlaceholder: 'youtube.com/watch?v=...',
+    orFile: '\u0438\u043b\u0438 \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u0435 \u0430\u0443\u0434\u0438\u043e / \u0432\u0438\u0434\u0435\u043e \u0444\u0430\u0439\u043b',
+    dropText: '\u041f\u0435\u0440\u0435\u0442\u0430\u0449\u0438\u0442\u0435 \u0444\u0430\u0439\u043b \u0438\u043b\u0438 <span style="color:var(--accent);font-weight:700;text-decoration:underline">\u0432\u044b\u0431\u0435\u0440\u0438\u0442\u0435</span>',
+    dropFormats: 'MP3, MP4, WAV, WebM, M4A, OGG \u2014 \u0442\u0440\u0430\u043d\u0441\u043a\u0440\u0438\u0431\u0430\u0446\u0438\u044f \u043f\u0440\u044f\u043c\u043e \u0432 \u0431\u0440\u0430\u0443\u0437\u0435\u0440\u0435',
+    orPaste: '\u0438\u043b\u0438 \u0432\u0441\u0442\u0430\u0432\u044c\u0442\u0435 \u0442\u0440\u0430\u043d\u0441\u043a\u0440\u0438\u043f\u0442',
+    modelLabel: '\u041c\u043e\u0434\u0435\u043b\u044c',
+    analyzeBtn: '\u0410\u043d\u0430\u043b\u0438\u0437\u0438\u0440\u043e\u0432\u0430\u0442\u044c \u2192',
+    analyzing: '\u0418\u0437\u0432\u043b\u0435\u043a\u0430\u0435\u043c \u0437\u043d\u0430\u043d\u0438\u044f...',
+    library: '\u0411\u0438\u0431\u043b\u0438\u043e\u0442\u0435\u043a\u0430',
+    searchPlaceholder: '\u041f\u043e\u0438\u0441\u043a \u043f\u043e \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u044e \u0438\u043b\u0438 \u0442\u0435\u0433\u0430\u043c...',
+    export: '\u042d\u043a\u0441\u043f\u043e\u0440\u0442',
+    import: '\u0418\u043c\u043f\u043e\u0440\u0442',
+    quizHint: '\u043d\u0430\u0436\u043c\u0438\u0442\u0435 \u043d\u0430 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0443 \u0434\u043b\u044f \u043e\u0442\u0432\u0435\u0442\u0430',
+    again: '\u0421\u043d\u043e\u0432\u0430', hard: '\u0422\u0440\u0443\u0434\u043d\u043e', good: '\u0425\u043e\u0440\u043e\u0448\u043e', easy: '\u041b\u0435\u0433\u043a\u043e',
+    done: '\u0413\u043e\u0442\u043e\u0432\u043e!',
+    sessionComplete: '\u0421\u0435\u0441\u0441\u0438\u044f \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u0430. \u0412\u0430\u0448\u0438 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b:',
+    noCards: '\u041d\u0435\u0442 \u043a\u0430\u0440\u0442\u043e\u0447\u0435\u043a',
+    noCardsHint: '\u041f\u0440\u043e\u0430\u043d\u0430\u043b\u0438\u0437\u0438\u0440\u0443\u0439\u0442\u0435 \u0432\u0438\u0434\u0435\u043e \u0438 \u0441\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u0435, \u0447\u0442\u043e\u0431\u044b \u043d\u0430\u0447\u0430\u0442\u044c.',
+    tabAnalyze: '\u0410\u043d\u0430\u043b\u0438\u0437', tabLibrary: '\u0411\u0438\u0431\u043b\u0438\u043e\u0442\u0435\u043a\u0430', tabQuiz: '\u041a\u0432\u0438\u0437',
+    emptyLib: '\u0411\u0438\u0431\u043b\u0438\u043e\u0442\u0435\u043a\u0430 \u043f\u0443\u0441\u0442\u0430', emptyLibHint: '\u041f\u0440\u043e\u0430\u043d\u0430\u043b\u0438\u0437\u0438\u0440\u0443\u0439\u0442\u0435 \u0432\u0438\u0434\u0435\u043e \u0434\u043b\u044f \u043d\u0430\u0447\u0430\u043b\u0430.',
+    noMatches: '\u041d\u0438\u0447\u0435\u0433\u043e \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e', noMatchesHint: '\u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0434\u0440\u0443\u0433\u043e\u0439 \u0437\u0430\u043f\u0440\u043e\u0441',
+    saved: '\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e!', deleted: '\u0423\u0434\u0430\u043b\u0435\u043d\u043e', exported: '\u042d\u043a\u0441\u043f\u043e\u0440\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u043e!',
+    analysisComplete: '\u0410\u043d\u0430\u043b\u0438\u0437 \u0437\u0430\u0432\u0435\u0440\u0448\u0451\u043d!',
+    pastePrompt: '\u0412\u0441\u0442\u0430\u0432\u044c\u0442\u0435 \u0441\u0441\u044b\u043b\u043a\u0443 YouTube \u0438\u043b\u0438 \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u0435 \u0444\u0430\u0439\u043b',
+    save: '\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c', quiz: '\u041a\u0432\u0438\u0437',
+    reviewed: '\u041f\u0440\u043e\u0441\u043c\u043e\u0442\u0440\u0435\u043d\u043e', correct: '\u0412\u0435\u0440\u043d\u043e', accuracy: '\u0422\u043e\u0447\u043d\u043e\u0441\u0442\u044c',
+    cards: '\u043a\u0430\u0440\u0442\u043e\u0447\u0435\u043a', back: '\u2190 \u041d\u0430\u0437\u0430\u0434',
+  },
+  zh: {
+    heroTag: 'AI\u9a71\u52a8\u7684\u77e5\u8bc6\u63d0\u53d6',
+    heroTitle: '\u8bb0\u4f4f\u4f60<br><mark>\u770b\u8fc7\u7684</mark><br>\u4e00\u5207',
+    heroSub: 'YouTube\u94fe\u63a5\u6216\u4efb\u4f55\u97f3\u9891/\u89c6\u9891\u6587\u4ef6\u3002AI\u63d0\u53d6\u5173\u952e\u89c1\u89e3\uff0c\u751f\u6210\u95ea\u5361\uff0c\u5e76\u901a\u8fc7\u95f4\u9694\u91cd\u590d\u5e2e\u52a9\u8bb0\u5fc6\u3002',
+    urlLabel: 'YouTube \u94fe\u63a5',
+    urlPlaceholder: 'youtube.com/watch?v=...',
+    orFile: '\u6216\u62d6\u653e\u97f3\u9891/\u89c6\u9891\u6587\u4ef6',
+    dropText: '\u62d6\u653e\u6587\u4ef6\u6216 <span style="color:var(--accent);font-weight:700;text-decoration:underline">\u6d4f\u89c8</span>',
+    dropFormats: 'MP3, MP4, WAV, WebM, M4A, OGG \u2014 \u5728\u6d4f\u89c8\u5668\u4e2d\u81ea\u52a8\u8f6c\u5f55',
+    orPaste: '\u6216\u7c98\u8d34\u6587\u5b57\u7a3f',
+    modelLabel: '\u6a21\u578b',
+    analyzeBtn: '\u5206\u6790 \u2192',
+    analyzing: '\u6b63\u5728\u63d0\u53d6\u77e5\u8bc6...',
+    library: '\u56fe\u4e66\u9986',
+    searchPlaceholder: '\u6309\u6807\u9898\u6216\u6807\u7b7e\u641c\u7d22...',
+    export: '\u5bfc\u51fa',
+    import: '\u5bfc\u5165',
+    quizHint: '\u70b9\u51fb\u5361\u7247\u67e5\u770b\u7b54\u6848',
+    again: '\u518d\u6765', hard: '\u56f0\u96be', good: '\u826f\u597d', easy: '\u7b80\u5355',
+    done: '\u5b8c\u6210\uff01',
+    sessionComplete: '\u7ec3\u4e60\u5b8c\u6210\u3002\u4ee5\u4e0b\u662f\u4f60\u7684\u7ed3\u679c\uff1a',
+    noCards: '\u6ca1\u6709\u5f85\u590d\u4e60\u7684\u5361\u7247',
+    noCardsHint: '\u5206\u6790\u89c6\u9891\u5e76\u4fdd\u5b58\u4ee5\u5f00\u59cb\u5b66\u4e60\u3002',
+    tabAnalyze: '\u5206\u6790', tabLibrary: '\u56fe\u4e66\u9986', tabQuiz: '\u6d4b\u9a8c',
+    emptyLib: '\u56fe\u4e66\u9986\u4e3a\u7a7a', emptyLibHint: '\u5206\u6790\u89c6\u9891\u4ee5\u5f00\u59cb\u3002',
+    noMatches: '\u672a\u627e\u5230', noMatchesHint: '\u8bf7\u5c1d\u8bd5\u5176\u4ed6\u641c\u7d22',
+    saved: '\u5df2\u4fdd\u5b58\uff01', deleted: '\u5df2\u5220\u9664', exported: '\u5df2\u5bfc\u51fa\uff01',
+    analysisComplete: '\u5206\u6790\u5b8c\u6210\uff01',
+    pastePrompt: '\u7c98\u8d34YouTube\u94fe\u63a5\u6216\u62d6\u653e\u6587\u4ef6',
+    save: '\u4fdd\u5b58', quiz: '\u6d4b\u9a8c',
+    reviewed: '\u5df2\u590d\u4e60', correct: '\u6b63\u786e', accuracy: '\u51c6\u786e\u7387',
+    cards: '\u5361\u7247', back: '\u2190 \u8fd4\u56de',
+  }
+};
+
+let currentLang = localStorage.getItem('pm_lang') || 'en';
+
+function t(key) { return (I18N[currentLang] || I18N.en)[key] || I18N.en[key] || key; }
+
+function applyLang() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.dataset.i18n;
+    const val = t(key);
+    if (val) el.innerHTML = val;
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    const key = el.dataset.i18nPlaceholder;
+    const val = t(key);
+    if (val) el.placeholder = val;
+  });
+  document.getElementById('langToggle').textContent = LANG_LABELS[currentLang];
+  document.documentElement.lang = currentLang;
+}
+
+document.getElementById('langToggle').onclick = () => {
+  const idx = LANGS.indexOf(currentLang);
+  currentLang = LANGS[(idx + 1) % LANGS.length];
+  localStorage.setItem('pm_lang', currentLang);
+  applyLang();
+};
+
+applyLang();
+
 // ─── State ───
 let currentAnalysis = null;
 let library = JSON.parse(localStorage.getItem('pm_library') || '[]');
@@ -1178,7 +1313,7 @@ async function analyze() {
     btn.disabled = false;
   }
 
-  if (!url && !text) return toast('Paste a YouTube URL or drop an audio/video file', 'error');
+  if (!url && !text) return toast(t('pastePrompt'), 'error');
 
   const btn = document.getElementById('analyzeBtn');
   btn.classList.add('loading');
@@ -1195,7 +1330,7 @@ async function analyze() {
     currentAnalysis.url = url;
     currentAnalysis.analyzed_at = new Date().toISOString();
     renderResults(currentAnalysis);
-    toast('Analysis complete!', 'success');
+    toast(t('analysisComplete'), 'success');
   } catch (e) { toast(e.message, 'error'); }
   finally { btn.classList.remove('loading'); btn.disabled = false; }
 }
@@ -1251,7 +1386,7 @@ function saveToLibrary() {
     return toast('Already saved', 'error');
   library.unshift({ ...currentAnalysis, id: Date.now().toString(36) });
   localStorage.setItem('pm_library', JSON.stringify(library));
-  toast('Saved!', 'success');
+  toast(t('saved'), 'success');
   updateQuizBadge();
 }
 
@@ -1275,7 +1410,7 @@ function renderLibrary(filter = '') {
   const grid = document.getElementById('libraryGrid');
   const q = filter.toLowerCase();
   const filtered = library.filter(a => !q || a.title.toLowerCase().includes(q) || (a.tags||[]).some(t=>t.toLowerCase().includes(q)));
-  if (!filtered.length) { grid.innerHTML = `<div class="empty-state"><h3>${q?'No matches':'Empty library'}</h3><p>${q?'Try another search':'Analyze a video to get started.'}</p></div>`; return; }
+  if (!filtered.length) { grid.innerHTML = `<div class="empty-state"><h3>${q?t('noMatches'):t('emptyLib')}</h3><p>${q?t('noMatchesHint'):t('emptyLibHint')}</p></div>`; return; }
   grid.innerHTML = filtered.map(a => `<div class="lib-card" onclick="viewAnalysis('${a.id}')">
     <div class="lib-card-title">${esc(a.title)}</div>
     <div class="lib-card-meta"><span>${(a.flashcards||[]).length} cards</span><span>${a.analyzed_at?new Date(a.analyzed_at).toLocaleDateString():''}</span></div>
@@ -1298,14 +1433,14 @@ function deleteFromLibrary(id) {
   Object.keys(srData).forEach(k => { if (k.startsWith(id+':')) delete srData[k]; });
   localStorage.setItem('pm_sr', JSON.stringify(srData));
   renderLibrary(document.getElementById('librarySearch').value);
-  updateQuizBadge(); toast('Deleted');
+  updateQuizBadge(); toast(t('deleted'));
 }
 
 document.getElementById('exportBtn').onclick = () => {
   const blob = new Blob([JSON.stringify({library,srData,exported_at:new Date().toISOString()},null,2)], {type:'application/json'});
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
   a.download = `podmemory_${new Date().toISOString().slice(0,10)}.json`; a.click();
-  URL.revokeObjectURL(a.href); toast('Exported!', 'success');
+  URL.revokeObjectURL(a.href); toast(t('exported'), 'success');
 };
 
 document.getElementById('importBtn').onclick = () => document.getElementById('importFile').click();
