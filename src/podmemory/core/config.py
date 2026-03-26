@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     app_name: str = "PodMemory"
     debug: bool = False
     openrouter_api_key: str = ""
-    llm_model: str = "google/gemini-2.0-flash-001"
+    llm_model: str = "google/gemma-3-4b-it:free"
 
     model_config = {"env_prefix": "PM_"}
 

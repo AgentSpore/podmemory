@@ -1,18 +1,36 @@
-"""Audio transcription utilities.
+"""Download audio from YouTube when subtitles are unavailable.
 
-Transcription happens CLIENT-SIDE via Whisper.js in the browser.
-This module only provides URL type detection.
-No server-side transcription — full privacy, no API keys needed.
+Uses pytubefix (pure Python, no external tools).
+Audio is served to the browser for client-side Whisper.js transcription.
 """
 
-from urllib.parse import urlparse
+from __future__ import annotations
 
-MEDIA_EXTENSIONS = {
-    ".mp3", ".mp4", ".m4a", ".wav", ".webm", ".ogg", ".opus",
-    ".flac", ".aac", ".wma", ".avi", ".mkv", ".mov",
-}
+import asyncio
+import logging
+import tempfile
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
-def is_direct_media_url(url: str) -> bool:
-    path = urlparse(url).path.lower()
-    return any(path.endswith(ext) for ext in MEDIA_EXTENSIONS)
+async def download_youtube_audio(video_id: str) -> Path:
+    """Download audio from YouTube video using pytubefix.
+    Returns path to audio file.
+    """
+    def _download():
+        from pytubefix import YouTube
+
+        url = f"https://www.youtube.com/watch?v={video_id}"
+        yt = YouTube(url)
+
+        # Get audio-only stream (smallest)
+        stream = yt.streams.filter(only_audio=True).order_by("abr").first()
+        if not stream:
+            raise RuntimeError("No audio stream available for this video")
+
+        tmp_dir = tempfile.mkdtemp(prefix="podmemory_")
+        out_path = stream.download(output_path=tmp_dir, filename="audio")
+        return Path(out_path)
+
+    return await asyncio.to_thread(_download)

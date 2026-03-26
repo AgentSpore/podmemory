@@ -2,15 +2,18 @@ import time
 
 import httpx
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 
 from ..core.config import settings
 from ..schemas.analysis import AnalyzeRequest, AnalysisResponse
 from ..services.analyzer import analyze_transcript, AnalysisError
 from ..services.transcript import (
     is_youtube_url,
+    extract_youtube_id,
     get_youtube_transcript,
     from_user_paste,
 )
+from ..services.audio_transcript import download_youtube_audio
 
 router = APIRouter(prefix="/api", tags=["analysis"])
 
@@ -61,10 +64,26 @@ async def get_config():
     }
 
 
+@router.get("/youtube-audio/{video_id}")
+async def get_youtube_audio(video_id: str):
+    """Download audio from YouTube for client-side Whisper.js transcription.
+    Used as fallback when subtitles are unavailable.
+    """
+    try:
+        audio_path = await download_youtube_audio(video_id)
+        return FileResponse(
+            audio_path,
+            media_type="audio/mp4",
+            filename=f"{video_id}.m4a",
+        )
+    except Exception as e:
+        raise HTTPException(502, f"Failed to download audio: {e}")
+
+
 @router.post("/analyze", response_model=AnalysisResponse)
 async def analyze_video(req: AnalyzeRequest):
     if not req.url and not req.text:
-        raise HTTPException(400, "Provide a YouTube URL or paste transcript text")
+        raise HTTPException(400, "Provide a video URL or transcript text")
 
     try:
         if req.url and is_youtube_url(req.url):
@@ -75,14 +94,14 @@ async def analyze_video(req: AnalyzeRequest):
             raise HTTPException(
                 400,
                 "Only YouTube URLs are supported for auto-transcription. "
-                "For other videos, paste the transcript in the text field."
+                "For other videos, upload the audio/video file."
             )
         else:
             raise HTTPException(400, "No input provided")
-    except ValueError as e:
-        raise HTTPException(400, str(e))
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     except Exception as e:
         raise HTTPException(502, f"Failed to process: {e}")
 

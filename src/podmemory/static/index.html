@@ -1320,12 +1320,68 @@ async function analyze() {
   btn.disabled = true;
 
   try {
-    const resp = await fetch('/api/analyze', {
+    let resp = await fetch('/api/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url, text, model }),
     });
-    if (!resp.ok) { const err = await resp.json(); throw new Error(err.detail || 'Analysis failed'); }
+
+    // If YouTube transcript failed (400/502 = no subtitles/unavailable), auto-fallback: download audio → Whisper.js
+    if (!resp.ok && url && (url.includes('youtube') || url.includes('youtu.be'))) {
+      let errData;
+      try { errData = await resp.clone().json(); } catch { errData = {detail: ''}; }
+      const errMsg = (errData.detail || '').toLowerCase();
+      if (errMsg.includes('subtitle') || errMsg.includes('transcript') || errMsg.includes('unavailable') || errMsg.includes('restricted') || errMsg.includes('unplayable')) {
+        // Extract video ID and download audio from server
+        const vidMatch = url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+        if (vidMatch) {
+          const vidId = vidMatch[1];
+          const statusEl = document.getElementById('fileStatus');
+          const statusTxt = document.getElementById('fileStatusText');
+          const progress = document.getElementById('whisperProgress');
+          const bar = document.getElementById('whisperBar');
+          const wsTxt = document.getElementById('whisperStatusText');
+          statusEl.style.display = '';
+          statusTxt.textContent = 'No subtitles found. Downloading audio...';
+          progress.style.display = ''; bar.style.width = '10%';
+          wsTxt.textContent = 'Downloading audio from YouTube...';
+
+          const audioResp = await fetch(`/api/youtube-audio/${vidId}`);
+          if (!audioResp.ok) throw new Error('Failed to download audio');
+          const audioBlob = await audioResp.blob();
+          bar.style.width = '25%';
+          wsTxt.textContent = 'Loading Whisper AI model (~50MB, cached after first use)...';
+
+          // Load Whisper.js
+          if (!window._whisperPipeline) {
+            const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.4.1');
+            window._whisperPipeline = await pipeline('automatic-speech-recognition', 'onnx-community/whisper-base', { dtype: 'q8' });
+          }
+          bar.style.width = '40%';
+          wsTxt.textContent = 'Transcribing audio in browser...';
+
+          const arrayBuf = await audioBlob.arrayBuffer();
+          const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+          const audioBuf = await audioCtx.decodeAudioData(arrayBuf);
+          const audioData = audioBuf.getChannelData(0);
+          audioCtx.close();
+
+          const result = await window._whisperPipeline(audioData, { chunk_length_s: 30, stride_length_s: 5 });
+          bar.style.width = '100%';
+          wsTxt.textContent = 'Transcription complete!';
+          text = result.text;
+
+          // Re-send with transcript text
+          resp = await fetch('/api/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: '', text, model }),
+          });
+        }
+      }
+    }
+
+    if (!resp.ok) { let err; try { err = await resp.json(); } catch { err = {detail: 'Analysis failed'}; } throw new Error(err.detail || 'Analysis failed'); }
     currentAnalysis = await resp.json();
     currentAnalysis.url = url;
     currentAnalysis.analyzed_at = new Date().toISOString();
