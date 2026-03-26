@@ -42,12 +42,24 @@ async def get_youtube_transcript(url: str) -> Transcript:
 
     video_id = extract_youtube_id(url)
     if not video_id:
-        raise ValueError(f"Cannot extract YouTube video ID from: {url}")
+        raise ValueError("Invalid YouTube URL. Check the link and try again.")
 
-    yt = YouTubeTranscriptApi()
-
-    # v1.x API: .list() returns TranscriptList, .fetch() returns FetchedTranscript
-    transcript_list = yt.list(video_id)
+    try:
+        yt = YouTubeTranscriptApi()
+        transcript_list = yt.list(video_id)
+    except Exception as e:
+        msg = str(e)
+        if "unplayable" in msg.lower() or "unavailable" in msg.lower() or "not available" in msg.lower():
+            raise ValueError(
+                "This video is unavailable or restricted. "
+                "Try uploading the audio/video file instead."
+            )
+        if "no transcript" in msg.lower() or "could not retrieve" in msg.lower():
+            raise ValueError(
+                "No subtitles found for this video. "
+                "Try uploading the audio/video file — it will be transcribed in your browser."
+            )
+        raise ValueError(f"Could not get transcript: {msg[:150]}")
 
     # Prefer manual transcripts, then auto-generated
     transcript_obj = None
@@ -65,14 +77,20 @@ async def get_youtube_transcript(url: str) -> Transcript:
         pass
 
     if transcript_obj is None:
-        for t in transcript_list:
-            transcript_obj = t
-            source = "youtube_auto"
-            lang = t.language_code
-            break
+        try:
+            for t in transcript_list:
+                transcript_obj = t
+                source = "youtube_auto"
+                lang = t.language_code
+                break
+        except Exception:
+            pass
 
     if transcript_obj is None:
-        raise ValueError("No transcript available for this video")
+        raise ValueError(
+            "No subtitles found for this video. "
+            "Try uploading the audio/video file instead."
+        )
 
     snippets = transcript_obj.fetch()
     segments = []
