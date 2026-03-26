@@ -1381,13 +1381,13 @@ async function analyze() {
       body: JSON.stringify({ url, text, model }),
     });
 
-    // If YouTube transcript failed (400/502 = no subtitles/unavailable), auto-fallback: download audio → Whisper.js
+    // Server handles cascade: subtitles → yt-dlp + Groq automatically.
+    // 503 GROQ_FALLBACK = Groq unavailable → fall back to yt-dlp download + browser Whisper.js
     if (!resp.ok && url && (url.includes('youtube') || url.includes('youtu.be'))) {
       let errData;
       try { errData = await resp.clone().json(); } catch { errData = {detail: ''}; }
-      const errMsg = (errData.detail || '').toLowerCase();
-      if (errMsg.includes('subtitle') || errMsg.includes('transcript') || errMsg.includes('unavailable') || errMsg.includes('restricted') || errMsg.includes('unplayable')) {
-        // Extract video ID and download audio from server
+      const errMsg = (errData.detail || '');
+      if (errMsg.includes('GROQ_FALLBACK')) {
         const vidMatch = url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
         if (vidMatch) {
           const vidId = vidMatch[1];
@@ -1397,8 +1397,9 @@ async function analyze() {
           const bar = document.getElementById('whisperBar');
           const wsTxt = document.getElementById('whisperStatusText');
           statusEl.style.display = '';
-          statusTxt.textContent = 'No subtitles found. Downloading audio...';
-          progress.style.display = ''; bar.style.width = '10%';
+          progress.style.display = '';
+          bar.style.width = '10%';
+          statusTxt.textContent = 'Groq unavailable. Falling back to browser transcription...';
           wsTxt.textContent = 'Downloading audio from YouTube...';
 
           const audioResp = await fetch(`/api/youtube-audio/${vidId}`);
@@ -1407,7 +1408,6 @@ async function analyze() {
           bar.style.width = '25%';
           wsTxt.textContent = 'Loading Whisper AI model (~50MB, cached after first use)...';
 
-          // Load Whisper.js
           if (!window._whisperPipeline) {
             const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.4.1');
             window._whisperPipeline = await pipeline('automatic-speech-recognition', 'onnx-community/whisper-base', { dtype: 'q8' });
@@ -1423,12 +1423,9 @@ async function analyze() {
 
           const result = await window._whisperPipeline(audioData, { chunk_length_s: 30, stride_length_s: 5 });
           bar.style.width = '100%';
-          wsTxt.textContent = 'Transcription complete!';
+          wsTxt.textContent = 'Browser transcription complete!';
 
-          // Show transcript for review before analysis
           text = await showTranscriptReview(result.text);
-
-          // Re-send with reviewed transcript text
           resp = await fetch('/api/analyze', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

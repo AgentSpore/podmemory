@@ -13,7 +13,7 @@ from ..services.transcript import (
     get_youtube_transcript,
     from_user_paste,
 )
-from ..services.audio_transcript import download_youtube_audio, transcribe_with_groq
+from ..services.audio_transcript import download_youtube_audio, transcribe_with_groq, youtube_transcribe_server
 
 router = APIRouter(prefix="/api", tags=["analysis"])
 
@@ -64,9 +64,29 @@ async def get_config():
     }
 
 
+@router.get("/youtube-transcribe/{video_id}")
+async def youtube_transcribe(video_id: str):
+    """Server-side: yt-dlp download → Groq Whisper transcription.
+
+    Returns {text, source, language} on success.
+    Returns 503 with GROQ_UNAVAILABLE/GROQ_RATE_LIMIT if Groq can't be used
+    (frontend should fallback to browser Whisper).
+    """
+    try:
+        result = await youtube_transcribe_server(video_id)
+        return {"text": result["text"], "source": result["source"], "language": result.get("language", "unknown")}
+    except RuntimeError as e:
+        msg = str(e)
+        if msg in ("NO_GROQ_KEY", "GROQ_RATE_LIMIT"):
+            raise HTTPException(503, msg)
+        raise HTTPException(502, f"Transcription failed: {msg}")
+    except Exception as e:
+        raise HTTPException(502, f"Failed to process: {e}")
+
+
 @router.get("/youtube-audio/{video_id}")
 async def get_youtube_audio(video_id: str):
-    """Download audio from YouTube. Used for fallback transcription."""
+    """Download audio from YouTube via yt-dlp. Fallback when Groq unavailable."""
     try:
         audio_path = await download_youtube_audio(video_id)
         return FileResponse(audio_path, media_type="audio/mp4", filename=f"{video_id}.m4a")
@@ -99,25 +119,42 @@ async def analyze_video(req: AnalyzeRequest):
     if not req.url and not req.text:
         raise HTTPException(400, "Provide a video URL or transcript text")
 
-    try:
-        if req.url and is_youtube_url(req.url):
+    transcript = None
+
+    # 1. Try YouTube subtitles (instant, free)
+    if req.url and is_youtube_url(req.url):
+        try:
             transcript = await get_youtube_transcript(req.url)
-        elif req.text:
-            transcript = from_user_paste(req.text)
-        elif req.url:
-            raise HTTPException(
-                400,
-                "Only YouTube URLs are supported for auto-transcription. "
-                "For other videos, upload the audio/video file."
-            )
-        else:
-            raise HTTPException(400, "No input provided")
-    except HTTPException:
-        raise
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    except Exception as e:
-        raise HTTPException(502, f"Failed to process: {e}")
+        except (ValueError, Exception) as subtitle_err:
+            # 2. No subtitles — try server-side yt-dlp + Groq Whisper
+            video_id = extract_youtube_id(req.url)
+            if video_id:
+                try:
+                    result = await youtube_transcribe_server(video_id)
+                    transcript = from_user_paste(result["text"], result.get("language", "unknown"))
+                    transcript.source = result["source"]
+                except RuntimeError as e:
+                    msg = str(e)
+                    if msg in ("NO_GROQ_KEY", "GROQ_RATE_LIMIT"):
+                        # Groq unavailable — tell frontend to use browser Whisper
+                        raise HTTPException(503, f"GROQ_FALLBACK:{msg}")
+                    raise HTTPException(502, f"Transcription failed: {msg}")
+            else:
+                raise HTTPException(400, str(subtitle_err))
+
+    elif req.text:
+        transcript = from_user_paste(req.text)
+    elif req.url:
+        raise HTTPException(
+            400,
+            "Only YouTube URLs are supported for auto-transcription. "
+            "For other videos, upload the audio/video file."
+        )
+    else:
+        raise HTTPException(400, "No input provided")
+
+    if not transcript:
+        raise HTTPException(502, "Failed to obtain transcript")
 
     try:
         result = await analyze_transcript(transcript, req.model)

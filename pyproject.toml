@@ -11,7 +11,7 @@ dependencies = [
     "pydantic-settings>=2.7",
     "python-multipart>=0.0.9",
     "youtube-transcript-api>=1.0.0",
-    "pytubefix>=10.3.8",
+    "yt-dlp>=2024.0",
 ]
 
 [project.optional-dependencies]
