@@ -1,25 +1,30 @@
+import logging
 import time
 
 import httpx
 from fastapi import APIRouter, HTTPException, UploadFile, File
-from fastapi.responses import FileResponse
 
 from ..core.config import settings
 from ..schemas.analysis import AnalyzeRequest, AnalysisResponse
 from ..services.analyzer import analyze_transcript, AnalysisError
 from ..services.transcript import (
     is_youtube_url,
-    extract_youtube_id,
     get_youtube_transcript,
     from_user_paste,
 )
-from ..services.audio_transcript import download_youtube_audio, transcribe_with_groq, youtube_transcribe_server
+from ..services.audio_transcript import transcribe_with_groq
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["analysis"])
 
 _models_cache: list[dict] = []
 _models_cache_ts: float = 0
 CACHE_TTL = 3600
+
+# Rate limiter for YouTube transcript API (datacenter IPs get banned easily)
+_yt_last_request: float = 0
+_YT_MIN_INTERVAL = 5  # seconds between YouTube requests
 
 
 async def _fetch_free_models() -> list[dict]:
@@ -64,39 +69,9 @@ async def get_config():
     }
 
 
-@router.get("/youtube-transcribe/{video_id}")
-async def youtube_transcribe(video_id: str):
-    """Server-side: yt-dlp download → Groq Whisper transcription.
-
-    Returns {text, source, language} on success.
-    Returns 503 with GROQ_UNAVAILABLE/GROQ_RATE_LIMIT if Groq can't be used
-    (frontend should fallback to browser Whisper).
-    """
-    try:
-        result = await youtube_transcribe_server(video_id)
-        return {"text": result["text"], "source": result["source"], "language": result.get("language", "unknown")}
-    except RuntimeError as e:
-        msg = str(e)
-        if msg in ("NO_GROQ_KEY", "GROQ_RATE_LIMIT"):
-            raise HTTPException(503, msg)
-        raise HTTPException(502, f"Transcription failed: {msg}")
-    except Exception as e:
-        raise HTTPException(502, f"Failed to process: {e}")
-
-
-@router.get("/youtube-audio/{video_id}")
-async def get_youtube_audio(video_id: str):
-    """Download audio from YouTube via yt-dlp. Fallback when Groq unavailable."""
-    try:
-        audio_path = await download_youtube_audio(video_id)
-        return FileResponse(audio_path, media_type="audio/mp4", filename=f"{video_id}.m4a")
-    except Exception as e:
-        raise HTTPException(502, f"Failed to download audio: {e}")
-
-
 @router.post("/transcribe")
 async def transcribe_audio(file: UploadFile = File(...)):
-    """Transcribe audio via Groq Whisper (primary). Returns {text, source}."""
+    """Transcribe uploaded audio/video via Groq Whisper. Returns {text, source}."""
     data = await file.read()
     if not data:
         raise HTTPException(400, "Empty file")
@@ -121,26 +96,26 @@ async def analyze_video(req: AnalyzeRequest):
 
     transcript = None
 
-    # 1. Try YouTube subtitles (instant, free)
     if req.url and is_youtube_url(req.url):
+        # Rate limit YouTube requests (datacenter IPs get banned easily)
+        global _yt_last_request
+        now = time.time()
+        wait = _YT_MIN_INTERVAL - (now - _yt_last_request)
+        if wait > 0:
+            import asyncio
+            await asyncio.sleep(wait)
+        _yt_last_request = time.time()
+
         try:
             transcript = await get_youtube_transcript(req.url)
-        except (ValueError, Exception) as subtitle_err:
-            # 2. No subtitles — try server-side yt-dlp + Groq Whisper
-            video_id = extract_youtube_id(req.url)
-            if video_id:
-                try:
-                    result = await youtube_transcribe_server(video_id)
-                    transcript = from_user_paste(result["text"], result.get("language", "unknown"))
-                    transcript.source = result["source"]
-                except RuntimeError as e:
-                    msg = str(e)
-                    if msg in ("NO_GROQ_KEY", "GROQ_RATE_LIMIT"):
-                        # Groq unavailable — tell frontend to use browser Whisper
-                        raise HTTPException(503, f"GROQ_FALLBACK:{msg}")
-                    raise HTTPException(502, f"Transcription failed: {msg}")
-            else:
-                raise HTTPException(400, str(subtitle_err))
+        except (ValueError, Exception) as e:
+            err_msg = str(e)
+            logger.warning("YouTube transcript failed for %s: %s", req.url, err_msg)
+            raise HTTPException(
+                400,
+                "NO_SUBTITLES: This video has no subtitles available. "
+                "Upload the audio/video file instead — it will be transcribed automatically."
+            )
 
     elif req.text:
         transcript = from_user_paste(req.text)

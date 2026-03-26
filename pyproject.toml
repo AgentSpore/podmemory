@@ -11,11 +11,10 @@ dependencies = [
     "pydantic-settings>=2.7",
     "python-multipart>=0.0.9",
     "youtube-transcript-api>=1.0.0",
-    "yt-dlp>=2024.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-asyncio", "httpx"]
+dev = ["pytest", "pytest-asyncio", "httpx", "yt-dlp>=2024.0"]
 
 [build-system]
 requires = ["hatchling"]
