@@ -1,9 +1,10 @@
 import logging
+import tempfile
 import time
 
 import httpx
 from fastapi import APIRouter, HTTPException, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from ..core.config import settings
 from ..schemas.analysis import AnalyzeRequest, AnalysisResponse
@@ -152,3 +153,52 @@ async def analyze_video(req: AnalyzeRequest):
         raise HTTPException(502, str(e))
 
     return AnalysisResponse(**result)
+
+
+@router.post("/export/anki")
+async def export_anki(req: dict):
+    """Export flashcards as Anki .apkg file.
+
+    Expects: {"title": "...", "flashcards": [{"q": "...", "a": "..."}, ...]}
+    """
+    import genanki
+    import random
+
+    title = req.get("title", "PodMemory Export")
+    flashcards = req.get("flashcards", [])
+    if not flashcards:
+        raise HTTPException(400, "No flashcards to export")
+
+    model_id = random.randrange(1 << 30, 1 << 31)
+    deck_id = random.randrange(1 << 30, 1 << 31)
+
+    anki_model = genanki.Model(
+        model_id,
+        "PodMemory",
+        fields=[{"name": "Question"}, {"name": "Answer"}],
+        templates=[{
+            "name": "Card 1",
+            "qfmt": "{{Question}}",
+            "afmt": '{{FrontSide}}<hr id="answer">{{Answer}}',
+        }],
+    )
+
+    deck = genanki.Deck(deck_id, title)
+    for fc in flashcards:
+        note = genanki.Note(model=anki_model, fields=[fc["q"], fc["a"]])
+        deck.add_note(note)
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".apkg", delete=False)
+    genanki.Package(deck).write_to_file(tmp.name)
+    tmp.close()
+
+    data = open(tmp.name, "rb").read()
+    import os
+    os.unlink(tmp.name)
+
+    safe_title = "".join(c for c in title if c.isalnum() or c in " -_")[:50].strip() or "podmemory"
+    return Response(
+        content=data,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{safe_title}.apkg"'},
+    )

@@ -11,6 +11,14 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+# Noise patterns in YouTube auto-generated subtitles
+_NOISE_PATTERNS = re.compile(
+    r"\[(?:Music|Applause|Laughter|Cheering|Silence|Inaudible|Foreign)\]",
+    re.IGNORECASE,
+)
+_MULTI_SPACES = re.compile(r"[ \t]+")
+_MULTI_NEWLINES = re.compile(r"\n{3,}")
+
 
 @dataclass
 class Transcript:
@@ -100,12 +108,33 @@ async def get_youtube_transcript(url: str) -> Transcript:
         segments.append({"start": s.start, "text": s.text})
         full_text_parts.append(s.text)
 
+    raw_text = " ".join(full_text_parts)
+    cleaned = clean_transcript(raw_text) if source == "youtube_auto" else raw_text
+
     return Transcript(
-        text=" ".join(full_text_parts),
+        text=cleaned,
         segments=segments,
         source=source,
         language=lang,
     )
+
+
+def clean_transcript(text: str) -> str:
+    """Remove noise from auto-generated subtitles."""
+    text = _NOISE_PATTERNS.sub("", text)
+    # Deduplicate consecutive identical phrases (common in auto-subs)
+    words = text.split()
+    cleaned = []
+    prev_chunk = ""
+    for i in range(0, len(words), 5):
+        chunk = " ".join(words[i : i + 5])
+        if chunk != prev_chunk:
+            cleaned.append(chunk)
+        prev_chunk = chunk
+    text = " ".join(cleaned)
+    text = _MULTI_SPACES.sub(" ", text)
+    text = _MULTI_NEWLINES.sub("\n\n", text)
+    return text.strip()
 
 
 def from_user_paste(text: str, language: str = "unknown") -> Transcript:

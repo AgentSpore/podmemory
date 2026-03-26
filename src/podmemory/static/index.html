@@ -1440,6 +1440,7 @@ function renderResults(d) {
     <button class="action-btn primary" onclick="saveToLibrary()"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 3h10a2 2 0 012 2v12l-7-3-7 3V5a2 2 0 012-2z"/></svg>Save</button>
     <button class="action-btn" onclick="startQuizFromResults()"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 2a6 6 0 00-2 11.65V16a2 2 0 004 0v-2.35A6 6 0 0010 2z"/></svg>Quiz</button>
     <button class="action-btn" onclick="downloadMd()"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 3v10m-3-3l3 3 3-3M4 14v2h12v-2"/></svg>.md</button>
+    <button class="action-btn" onclick="exportAnki()"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4h12v12H4z"/><path d="M8 8h4M8 11h4"/></svg>Anki</button>
     </div></div>`;
 
   c.innerHTML = h;
@@ -1459,6 +1460,25 @@ function saveToLibrary() {
   localStorage.setItem('pm_library', JSON.stringify(library));
   toast(t('saved'), 'success');
   updateQuizBadge();
+}
+
+async function exportAnki() {
+  if (!currentAnalysis?.flashcards?.length) return toast('No flashcards to export', 'error');
+  try {
+    const resp = await fetch('/api/export/anki', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: currentAnalysis.title, flashcards: currentAnalysis.flashcards }),
+    });
+    if (!resp.ok) throw new Error('Export failed');
+    const blob = await resp.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = resp.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] || 'podmemory.apkg';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast('Anki deck exported!', 'success');
+  } catch (e) { toast('Anki export error: ' + e.message, 'error'); }
 }
 
 function downloadMd() {

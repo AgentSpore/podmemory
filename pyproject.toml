@@ -12,6 +12,7 @@ dependencies = [
     "python-multipart>=0.0.9",
     "youtube-transcript-api>=1.0.0",
     "yt-dlp>=2024.0",
+    "genanki>=0.13",
 ]
 
 [project.optional-dependencies]
