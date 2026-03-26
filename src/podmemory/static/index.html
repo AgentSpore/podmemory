@@ -1,0 +1,1424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#fffbf0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="description" content="PodMemory — Extract knowledge from any video. AI analysis, flashcards, spaced repetition.">
+<title>PodMemory</title>
+<link rel="manifest" href="/static/manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════
+   PodMemory — "The Bold Notebook"
+   Neobrutalist editorial: hard borders, bold type, warm paper
+   ═══════════════════════════════════════════════════════ */
+
+:root {
+  --bg: #fffbf0;
+  --surface: #ffffff;
+  --surface2: #f5f0e5;
+  --border: #1a1a1a;
+  --border-light: #d4cfc2;
+  --text: #1a1a1a;
+  --text2: #6b6358;
+  --text3: #a09888;
+  --accent: #ff5c35;
+  --accent2: #2563eb;
+  --accent3: #16a34a;
+  --highlight: #fef08a;
+  --shadow: 4px 4px 0 #1a1a1a;
+  --shadow-sm: 2px 2px 0 #1a1a1a;
+  --shadow-hover: 6px 6px 0 #1a1a1a;
+  --font-display: 'Clash Display', Impact, sans-serif;
+  --font-body: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+  --radius: 0;
+  --border-w: 2.5px;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme="dark"] {
+  --bg: #1a1714;
+  --surface: #252118;
+  --surface2: #302a20;
+  --border: #e8dcc8;
+  --border-light: #443d30;
+  --text: #f0e8d8;
+  --text2: #a89880;
+  --text3: #706050;
+  --accent: #ff7a55;
+  --accent2: #60a5fa;
+  --accent3: #4ade80;
+  --highlight: rgba(254, 240, 138, 0.15);
+  --shadow: 4px 4px 0 rgba(232,220,200,0.2);
+  --shadow-sm: 2px 2px 0 rgba(232,220,200,0.15);
+  --shadow-hover: 6px 6px 0 rgba(232,220,200,0.25);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { font-size: 16px; }
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100dvh;
+  transition: background 0.3s, color 0.3s;
+}
+
+/* Dot grid pattern */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: radial-gradient(circle, var(--border-light) 1px, transparent 1px);
+  background-size: 24px 24px;
+  opacity: 0.4;
+  pointer-events: none;
+  z-index: 0;
+}
+
+#app {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 0 16px 110px;
+  position: relative;
+  z-index: 1;
+}
+
+/* ─── Header ─── */
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 0 24px;
+  border-bottom: var(--border-w) solid var(--border);
+  margin-bottom: 28px;
+}
+
+.logo {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  text-transform: uppercase;
+}
+
+.logo em {
+  font-style: normal;
+  color: var(--accent);
+}
+
+.header-actions { display: flex; gap: 8px; }
+
+.icon-btn {
+  width: 38px; height: 38px;
+  border: var(--border-w) solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s var(--ease);
+  box-shadow: var(--shadow-sm);
+}
+
+.icon-btn:hover { box-shadow: var(--shadow); transform: translate(-1px, -1px); }
+.icon-btn:active { box-shadow: none; transform: translate(2px, 2px); }
+.icon-btn svg { width: 18px; height: 18px; }
+
+/* ─── Screens ─── */
+.screen { display: none; animation: slideIn 0.25s var(--ease); }
+.screen.active { display: block; }
+@keyframes slideIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
+
+/* ─── Analyze ─── */
+.hero-tag {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1.5px solid var(--accent);
+  padding: 4px 10px;
+  margin-bottom: 14px;
+}
+
+.hero-title {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 6vw, 2.8rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.hero-title mark {
+  background: var(--highlight);
+  color: var(--text);
+  padding: 0 6px;
+}
+
+.hero-sub {
+  color: var(--text2);
+  font-size: 0.95rem;
+  margin-bottom: 32px;
+  line-height: 1.5;
+}
+
+/* Input */
+.field-label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text2);
+  margin-bottom: 6px;
+  display: block;
+}
+
+.url-input {
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: var(--border-w) solid var(--border);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  outline: none;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+
+.url-input:focus {
+  box-shadow: var(--shadow);
+  transform: translate(-1px, -1px);
+}
+
+.url-input::placeholder { color: var(--text3); }
+
+.or-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.or-divider::before, .or-divider::after {
+  content: '';
+  flex: 1;
+  height: 1.5px;
+  background: var(--border-light);
+}
+
+.transcript-toggle {
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--surface2);
+  border: 1.5px dashed var(--border-light);
+  color: var(--text2);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+}
+
+.transcript-toggle:hover { border-color: var(--border); color: var(--text); }
+
+.transcript-area { display: none; margin-top: 10px; }
+.transcript-area.visible { display: block; }
+
+.transcript-area textarea {
+  width: 100%;
+  min-height: 100px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: var(--border-w) solid var(--border);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  outline: none;
+  resize: vertical;
+  box-shadow: var(--shadow-sm);
+}
+
+.transcript-area textarea:focus { box-shadow: var(--shadow); }
+
+/* Model row */
+.model-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 20px 0;
+}
+
+.model-select {
+  flex: 1;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: var(--border-w) solid var(--border);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10'%3E%3Cpath d='M2 3l3 4 3-4' fill='none' stroke='%231a1a1a' stroke-width='1.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+}
+
+[data-theme="dark"] .model-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10'%3E%3Cpath d='M2 3l3 4 3-4' fill='none' stroke='%23f0e8d8' stroke-width='1.5'/%3E%3C/svg%3E");
+}
+
+/* Analyze button */
+.analyze-btn {
+  width: 100%;
+  padding: 16px;
+  background: var(--accent);
+  color: #fff;
+  border: var(--border-w) solid var(--border);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition: all 0.15s var(--ease);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.analyze-btn:hover:not(:disabled) { box-shadow: var(--shadow-hover); transform: translate(-2px, -2px); }
+.analyze-btn:active:not(:disabled) { box-shadow: none; transform: translate(2px, 2px); }
+.analyze-btn:disabled { opacity: 0.5; cursor: wait; }
+
+.analyze-btn .spinner {
+  width: 16px; height: 16px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  display: none;
+}
+
+/* Upload zone */
+#uploadZone.dragover { border-color: var(--accent); background: var(--highlight); }
+#modeCloud.selected, #modeLocal.selected { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: var(--shadow-sm); }
+
+#dropZone:hover { border-color: var(--accent); }
+
+.analyze-btn.loading .spinner { display: block; }
+.analyze-btn.loading .btn-text { display: none; }
+.analyze-btn.loading .btn-loading { display: flex; align-items: center; gap: 10px; }
+.analyze-btn .btn-loading { display: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ─── Results ─── */
+.results { display: none; margin-top: 32px; }
+.results.visible { display: block; }
+
+.result-card {
+  background: var(--surface);
+  border: var(--border-w) solid var(--border);
+  padding: 24px;
+  margin-bottom: 14px;
+  box-shadow: var(--shadow-sm);
+  animation: cardPop 0.3s var(--ease) backwards;
+}
+
+.result-card:nth-child(1) { animation-delay: 0s; }
+.result-card:nth-child(2) { animation-delay: 0.04s; }
+.result-card:nth-child(3) { animation-delay: 0.08s; }
+.result-card:nth-child(4) { animation-delay: 0.12s; }
+.result-card:nth-child(5) { animation-delay: 0.16s; }
+.result-card:nth-child(6) { animation-delay: 0.2s; }
+
+@keyframes cardPop {
+  from { opacity: 0; transform: translateY(10px); }
+}
+
+.card-label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  font-weight: 500;
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1.5px solid var(--border-light);
+}
+
+.result-title {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.result-tldr {
+  color: var(--text2);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.result-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 14px; }
+
+.tag {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 3px 8px;
+  border: 1.5px solid var(--border);
+  background: var(--surface2);
+}
+
+.tag.difficulty {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+/* Insights */
+.insight-list { list-style: none; }
+
+.insight-item {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  display: flex;
+  gap: 14px;
+}
+
+.insight-item:last-child { border-bottom: none; }
+
+.insight-num {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--accent);
+  min-width: 28px;
+}
+
+/* Flashcards */
+.flashcards-grid { display: grid; gap: 8px; }
+
+.fc-preview {
+  padding: 14px 16px;
+  background: var(--surface2);
+  border: 1.5px solid var(--border-light);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.fc-preview:hover { border-color: var(--border); transform: translateX(3px); }
+
+.fc-q { font-size: 0.88rem; font-weight: 500; }
+
+.fc-a {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent2);
+  margin-top: 8px;
+  display: none;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border-light);
+}
+
+.fc-preview.revealed .fc-a { display: block; }
+
+/* Timestamps */
+.ts-list { list-style: none; }
+
+.ts-item {
+  display: flex;
+  gap: 14px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 0.85rem;
+  align-items: baseline;
+}
+
+.ts-item:last-child { border-bottom: none; }
+
+.ts-time {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--accent2);
+  min-width: 44px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+}
+
+.ts-time:hover { border-color: var(--accent2); background: rgba(37, 99, 235, 0.06); }
+
+/* Action items */
+.action-list { list-style: none; }
+
+.action-item {
+  padding: 8px 0;
+  font-size: 0.88rem;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.action-check {
+  width: 18px; height: 18px;
+  border: 2px solid var(--border);
+  flex-shrink: 0;
+  margin-top: 2px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-check.done {
+  background: var(--accent3);
+  border-color: var(--accent3);
+}
+
+.action-check.done::after { content: '✓'; color: #fff; font-size: 0.7rem; font-weight: 700; }
+.action-check.done + span { text-decoration: line-through; color: var(--text3); }
+
+/* Result actions */
+.result-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.action-btn {
+  flex: 1;
+  min-width: 120px;
+  padding: 12px 14px;
+  border: var(--border-w) solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.15s;
+}
+
+.action-btn:hover { box-shadow: var(--shadow); transform: translate(-1px,-1px); }
+.action-btn:active { box-shadow: none; transform: translate(2px,2px); }
+.action-btn svg { width: 14px; height: 14px; }
+
+.action-btn.primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ─── Quiz ─── */
+.quiz-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 12px;
+}
+
+.quiz-progress { width: 100%; margin-bottom: 24px; }
+
+.quiz-progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text2);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.quiz-progress-bar {
+  width: 100%;
+  height: 6px;
+  background: var(--surface2);
+  border: 1.5px solid var(--border-light);
+}
+
+.quiz-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s var(--ease);
+}
+
+.quiz-card {
+  width: 100%;
+  min-height: 260px;
+  background: var(--surface);
+  border: var(--border-w) solid var(--border);
+  box-shadow: var(--shadow);
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+}
+
+.quiz-card:hover { box-shadow: var(--shadow-hover); transform: translate(-2px,-2px); }
+
+.quiz-card-label {
+  position: absolute;
+  top: 14px; left: 16px;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text3);
+}
+
+.quiz-card-question {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.quiz-card-answer {
+  display: none;
+  font-family: var(--font-mono);
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: var(--accent2);
+}
+
+.quiz-card.flipped .quiz-card-question { display: none; }
+.quiz-card.flipped .quiz-card-answer { display: block; }
+.quiz-card.flipped .quiz-card-label { color: var(--accent); }
+
+.quiz-hint {
+  margin-top: 14px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.quiz-card.flipped + .quiz-hint { display: none; }
+
+.quiz-ratings {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  width: 100%;
+  margin-top: 18px;
+  display: none;
+}
+
+.quiz-ratings.visible { display: grid; }
+
+.rate-btn {
+  padding: 14px 8px;
+  border: var(--border-w) solid var(--border);
+  background: var(--surface);
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.12s;
+  text-transform: uppercase;
+}
+
+.rate-btn:hover { box-shadow: var(--shadow); transform: translate(-1px,-1px); }
+.rate-btn:active { box-shadow: none; transform: translate(2px,2px); }
+
+.rate-btn[data-quality="0"] { color: #dc2626; }
+.rate-btn[data-quality="2"] { color: #d97706; }
+.rate-btn[data-quality="3"] { color: var(--accent3); }
+.rate-btn[data-quality="5"] { color: var(--accent2); }
+
+.rate-key {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text3);
+  margin-top: 3px;
+  font-weight: 400;
+}
+
+/* Quiz complete */
+.quiz-complete { text-align: center; padding: 40px 0; display: none; }
+.quiz-complete.visible { display: block; }
+
+.quiz-complete h2 {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  text-transform: uppercase;
+}
+
+.quiz-stats {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  margin: 24px 0;
+}
+
+.quiz-stat-value {
+  font-family: var(--font-display);
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.quiz-stat-label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* ─── Library ─── */
+.library-title {
+  font-family: var(--font-display);
+  font-size: 1.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+}
+
+.search-wrap { position: relative; margin-bottom: 18px; }
+
+.search-wrap svg {
+  position: absolute;
+  left: 12px; top: 50%;
+  transform: translateY(-50%);
+  width: 16px; height: 16px;
+  color: var(--text3);
+}
+
+.library-search {
+  width: 100%;
+  padding: 12px 14px 12px 38px;
+  background: var(--surface);
+  border: var(--border-w) solid var(--border);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  outline: none;
+  box-shadow: var(--shadow-sm);
+}
+
+.library-search:focus { box-shadow: var(--shadow); }
+.library-search::placeholder { color: var(--text3); }
+
+.library-grid { display: grid; gap: 10px; }
+
+.lib-card {
+  background: var(--surface);
+  border: var(--border-w) solid var(--border);
+  padding: 16px 18px;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.15s;
+  position: relative;
+}
+
+.lib-card:hover { box-shadow: var(--shadow); transform: translate(-1px,-1px); }
+
+.lib-card-title { font-weight: 600; font-size: 0.92rem; margin-bottom: 6px; padding-right: 24px; }
+
+.lib-card-meta {
+  display: flex; gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text2);
+}
+
+.lib-card-tags { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
+
+.lib-delete {
+  position: absolute;
+  top: 12px; right: 12px;
+  width: 22px; height: 22px;
+  border: 1.5px solid transparent;
+  background: none;
+  color: var(--text3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all 0.15s;
+}
+
+.lib-card:hover .lib-delete { opacity: 1; }
+.lib-delete:hover { color: #dc2626; border-color: #dc2626; }
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text3);
+  border: 2px dashed var(--border-light);
+}
+
+.empty-state h3 {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  text-transform: uppercase;
+  color: var(--text2);
+  margin-bottom: 8px;
+}
+
+.empty-state p { font-size: 0.85rem; }
+
+.library-actions { display: flex; gap: 8px; margin-top: 20px; }
+
+/* ─── Tab Bar ─── */
+nav {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: var(--border-w) solid var(--border);
+  box-shadow: var(--shadow);
+  display: flex;
+  z-index: 200;
+  overflow: hidden;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 22px;
+  border: none;
+  background: none;
+  color: var(--text2);
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+  white-space: nowrap;
+}
+
+.tab svg { width: 16px; height: 16px; }
+
+.tab.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.tab:not(.active):hover { background: var(--surface2); color: var(--text); }
+
+.tab-badge {
+  position: absolute;
+  top: 4px; right: 6px;
+  min-width: 16px; height: 16px;
+  background: #dc2626;
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 700;
+  border-radius: 50%;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.tab-badge.visible { display: flex; }
+
+/* ─── Toast ─── */
+#toast {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-80px);
+  padding: 12px 24px;
+  background: var(--surface);
+  border: var(--border-w) solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text);
+  z-index: 9000;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: var(--shadow);
+}
+
+#toast.visible { transform: translateX(-50%) translateY(0); }
+#toast.error { border-color: #dc2626; color: #dc2626; }
+#toast.success { border-color: var(--accent3); color: var(--accent3); }
+
+/* ─── Responsive ─── */
+@media (max-width: 480px) {
+  .hero-title { font-size: 1.8rem; }
+  .tab span { display: none; }
+  .tab.active span { display: inline; }
+  .tab { padding: 12px 16px; }
+  .quiz-card { min-height: 200px; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <div class="logo">Pod<em>Memory</em></div>
+    <div class="header-actions">
+      <button class="icon-btn" id="themeToggle" title="Toggle theme">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="10" r="4"/><path d="M10 2v2m0 12v2M2 10h2m12 0h2m-3.5-5.5L13 6m-6 8-1.5 1.5m9-1.5L13 14M6 6 4.5 4.5"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ════ ANALYZE ════ -->
+  <section id="screenAnalyze" class="screen active">
+    <span class="hero-tag">AI-Powered Knowledge Extraction</span>
+    <h1 class="hero-title">Remember<br><mark>everything</mark><br>you watch</h1>
+    <p class="hero-sub">YouTube link or any audio/video file. AI extracts insights, generates flashcards, and helps you remember with spaced repetition.</p>
+
+    <label class="field-label">YouTube URL</label>
+    <input type="text" class="url-input" id="urlInput" placeholder="youtube.com/watch?v=..." autocomplete="off" spellcheck="false">
+
+    <div class="or-divider">or drop any audio / video file</div>
+
+    <div id="dropZone" style="border:2.5px dashed var(--border-light);padding:28px 20px;text-align:center;cursor:pointer;transition:all 0.15s">
+      <input type="file" id="fileInput" accept="audio/*,video/*,.mp3,.mp4,.m4a,.webm,.ogg,.wav,.mov" hidden>
+      <p style="font-size:0.92rem;color:var(--text2)">Drop file here or <span style="color:var(--accent);font-weight:700;text-decoration:underline">browse</span></p>
+      <p style="font-family:var(--font-mono);font-size:0.65rem;color:var(--text3);margin-top:6px">MP3, MP4, WAV, WebM, M4A, OGG — auto-transcribed in your browser</p>
+    </div>
+    <div id="fileStatus" style="display:none;margin-top:8px;padding:10px 14px;background:var(--surface2);border:1.5px solid var(--border-light)">
+      <p id="fileStatusText" style="font-family:var(--font-mono);font-size:0.78rem;color:var(--text)"></p>
+      <div id="whisperProgress" style="display:none;margin-top:8px">
+        <div style="height:4px;background:var(--border-light);overflow:hidden"><div id="whisperBar" style="height:100%;background:var(--accent);width:0%;transition:width 0.3s"></div></div>
+        <p id="whisperStatusText" style="font-family:var(--font-mono);font-size:0.65rem;color:var(--text3);margin-top:4px"></p>
+      </div>
+    </div>
+
+    <textarea id="transcriptInput" hidden></textarea>
+
+    <div class="model-row">
+      <span class="field-label" style="margin:0">Model</span>
+      <select class="model-select" id="modelSelect"><option>Loading...</option></select>
+    </div>
+
+    <button class="analyze-btn" id="analyzeBtn">
+      <span class="btn-text">Analyze →</span>
+      <span class="btn-loading"><span class="spinner"></span> Extracting knowledge...</span>
+    </button>
+
+    <div class="results" id="results"></div>
+  </section>
+
+  <!-- ════ LIBRARY ════ -->
+  <section id="screenLibrary" class="screen">
+    <h1 class="library-title">Library</h1>
+    <div class="search-wrap">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="9" r="5"/><path d="M13 13l4 4"/></svg>
+      <input type="text" class="library-search" id="librarySearch" placeholder="Search by title or tags...">
+    </div>
+    <div class="library-grid" id="libraryGrid"></div>
+    <div class="library-actions">
+      <button class="action-btn" id="exportBtn"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 3v10m-3-3l3 3 3-3M4 14v2h12v-2"/></svg>Export</button>
+      <button class="action-btn" id="importBtn"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 13V3m3 3l-3-3-3 3M4 14v2h12v-2"/></svg>Import</button>
+      <input type="file" id="importFile" accept=".json" hidden>
+    </div>
+  </section>
+
+  <!-- ════ QUIZ ════ -->
+  <section id="screenQuiz" class="screen">
+    <div class="quiz-container" id="quizContainer">
+      <div class="quiz-progress" id="quizProgress">
+        <div class="quiz-progress-label">
+          <span id="quizProgressText">Card 1 / 10</span>
+          <span id="quizSource"></span>
+        </div>
+        <div class="quiz-progress-bar"><div class="quiz-progress-fill" id="quizProgressFill"></div></div>
+      </div>
+      <div class="quiz-card" id="quizCard">
+        <span class="quiz-card-label" id="quizCardLabel">Question</span>
+        <div class="quiz-card-question" id="quizQ"></div>
+        <div class="quiz-card-answer" id="quizA"></div>
+      </div>
+      <p class="quiz-hint" id="quizHint">tap card to reveal answer</p>
+      <div class="quiz-ratings" id="quizRatings">
+        <button class="rate-btn" data-quality="0">Again<span class="rate-key">1</span></button>
+        <button class="rate-btn" data-quality="2">Hard<span class="rate-key">2</span></button>
+        <button class="rate-btn" data-quality="3">Good<span class="rate-key">3</span></button>
+        <button class="rate-btn" data-quality="5">Easy<span class="rate-key">4</span></button>
+      </div>
+    </div>
+    <div class="quiz-complete" id="quizComplete">
+      <h2>Done!</h2>
+      <p style="color:var(--text2)">Session complete. Here are your stats:</p>
+      <div class="quiz-stats">
+        <div><div class="quiz-stat-value" id="statReviewed">0</div><div class="quiz-stat-label">Reviewed</div></div>
+        <div><div class="quiz-stat-value" id="statCorrect">0</div><div class="quiz-stat-label">Correct</div></div>
+        <div><div class="quiz-stat-value" id="statAccuracy">0%</div><div class="quiz-stat-label">Accuracy</div></div>
+      </div>
+      <button class="action-btn primary" onclick="switchTab('analyze')" style="max-width:200px;margin:0 auto">← Back</button>
+    </div>
+    <div class="empty-state" id="quizEmpty">
+      <h3>No cards due</h3>
+      <p>Analyze a video and save it to start learning.</p>
+    </div>
+  </section>
+
+  <nav>
+    <button class="tab active" data-tab="analyze" onclick="switchTab('analyze')">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="9" r="5"/><path d="M13 13l4 4"/></svg>
+      <span>Analyze</span>
+    </button>
+    <button class="tab" data-tab="library" onclick="switchTab('library')">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5h14M3 5v10a2 2 0 002 2h10a2 2 0 002-2V5M8 5V3h4v2"/></svg>
+      <span>Library</span>
+    </button>
+    <button class="tab" data-tab="quiz" onclick="switchTab('quiz')">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 2a6 6 0 00-2 11.65V16a2 2 0 004 0v-2.35A6 6 0 0010 2z"/></svg>
+      <span>Quiz</span>
+      <span class="tab-badge" id="quizBadge">0</span>
+    </button>
+  </nav>
+
+  <div id="toast"></div>
+</div>
+
+<script>
+// ─── State ───
+let currentAnalysis = null;
+let library = JSON.parse(localStorage.getItem('pm_library') || '[]');
+let srData = JSON.parse(localStorage.getItem('pm_sr') || '{}');
+let quizSession = null;
+
+// ─── Theme ───
+const savedTheme = localStorage.getItem('pm_theme') || 'light';
+if (savedTheme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+
+document.getElementById('themeToggle').onclick = () => {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  document.documentElement.setAttribute('data-theme', isDark ? '' : 'dark');
+  localStorage.setItem('pm_theme', isDark ? 'light' : 'dark');
+};
+
+// ─── Toast ───
+let toastTimer;
+function toast(msg, type = '') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'visible' + (type ? ' ' + type : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.className = '', 3000);
+}
+
+// ─── Tab Navigation ───
+function switchTab(tab) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('screen' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
+  document.querySelector(`.tab[data-tab="${tab}"]`).classList.add('active');
+  if (tab === 'library') renderLibrary();
+  if (tab === 'quiz') initQuiz();
+}
+
+// ─── Load Config ───
+async function loadConfig() {
+  try {
+    const resp = await fetch('/api/config');
+    const data = await resp.json();
+    const sel = document.getElementById('modelSelect');
+    sel.innerHTML = '';
+    data.models.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.name;
+      if (m.id === data.default_model) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  } catch {
+    document.getElementById('modelSelect').innerHTML = '<option value="google/gemini-2.0-flash-001">Gemini Flash</option>';
+  }
+}
+loadConfig();
+
+// ─── Transcript Toggle ───
+// Transcript toggle removed — now inside <details>
+
+// ─── File Upload + Whisper.js ───
+let uploadedFile = null;
+let fileTranscript = null;
+
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const fileStatus = document.getElementById('fileStatus');
+const fileStatusText = document.getElementById('fileStatusText');
+
+dropZone.onclick = () => fileInput.click();
+dropZone.ondragover = e => { e.preventDefault(); dropZone.style.borderColor = 'var(--accent)'; dropZone.style.background = 'var(--highlight)'; };
+dropZone.ondragleave = () => { dropZone.style.borderColor = ''; dropZone.style.background = ''; };
+dropZone.ondrop = e => {
+  e.preventDefault(); dropZone.style.borderColor = ''; dropZone.style.background = '';
+  if (e.dataTransfer.files.length) selectFile(e.dataTransfer.files[0]);
+};
+fileInput.onchange = e => { if (e.target.files.length) selectFile(e.target.files[0]); };
+
+function selectFile(file) {
+  if (file.size > 100 * 1024 * 1024) return toast('File too large (max 100MB)', 'error');
+  uploadedFile = file;
+  fileTranscript = null;
+  fileStatus.style.display = '';
+  fileStatusText.textContent = file.name + ' (' + (file.size / (1024*1024)).toFixed(1) + 'MB) — ready to transcribe';
+  document.getElementById('whisperProgress').style.display = 'none';
+}
+
+async function transcribeWithWhisper() {
+  if (!uploadedFile) return null;
+  if (fileTranscript) return fileTranscript; // cached
+
+  const progress = document.getElementById('whisperProgress');
+  const bar = document.getElementById('whisperBar');
+  const statusTxt = document.getElementById('whisperStatusText');
+  progress.style.display = '';
+
+  try {
+    // Step 1: Load Whisper model
+    statusTxt.textContent = 'Loading AI model (first time: ~50MB download, then cached)...';
+    bar.style.width = '10%';
+
+    if (!window._whisperPipeline) {
+      const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.4.1');
+      window._whisperPipeline = await pipeline(
+        'automatic-speech-recognition',
+        'onnx-community/whisper-base',
+        { dtype: 'q8' }
+      );
+    }
+    bar.style.width = '30%';
+    statusTxt.textContent = 'Decoding audio...';
+
+    // Step 2: Read file as AudioBuffer
+    const arrayBuf = await uploadedFile.arrayBuffer();
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+    const audioBuf = await audioCtx.decodeAudioData(arrayBuf);
+    const audioData = audioBuf.getChannelData(0); // mono, 16kHz
+    audioCtx.close();
+
+    bar.style.width = '40%';
+    statusTxt.textContent = 'Transcribing (' + Math.round(audioBuf.duration) + 's audio)... This may take 1-3 minutes.';
+
+    // Step 3: Transcribe
+    const result = await window._whisperPipeline(audioData, {
+      chunk_length_s: 30,
+      stride_length_s: 5,
+      return_timestamps: false,
+    });
+
+    bar.style.width = '100%';
+    statusTxt.textContent = 'Transcription complete!';
+    fileTranscript = result.text;
+    fileStatusText.textContent = uploadedFile.name + ' — transcribed (' + result.text.length + ' chars)';
+    return result.text;
+  } catch (e) {
+    statusTxt.textContent = 'Error: ' + e.message;
+    throw e;
+  }
+}
+
+// ─── Analyze ───
+document.getElementById('analyzeBtn').onclick = analyze;
+
+async function analyze() {
+  const url = document.getElementById('urlInput').value.trim();
+  let text = document.getElementById('transcriptInput').value.trim();
+  const model = document.getElementById('modelSelect').value;
+
+  // If file uploaded, transcribe first
+  if (uploadedFile && !url && !text) {
+    const btn = document.getElementById('analyzeBtn');
+    btn.classList.add('loading');
+    btn.disabled = true;
+    try {
+      text = await transcribeWithWhisper();
+      if (!text) { btn.classList.remove('loading'); btn.disabled = false; return toast('Transcription failed', 'error'); }
+    } catch (e) { btn.classList.remove('loading'); btn.disabled = false; return toast('Transcription error: ' + e.message, 'error'); }
+    btn.classList.remove('loading');
+    btn.disabled = false;
+  }
+
+  if (!url && !text) return toast('Paste a YouTube URL or drop an audio/video file', 'error');
+
+  const btn = document.getElementById('analyzeBtn');
+  btn.classList.add('loading');
+  btn.disabled = true;
+
+  try {
+    const resp = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, text, model }),
+    });
+    if (!resp.ok) { const err = await resp.json(); throw new Error(err.detail || 'Analysis failed'); }
+    currentAnalysis = await resp.json();
+    currentAnalysis.url = url;
+    currentAnalysis.analyzed_at = new Date().toISOString();
+    renderResults(currentAnalysis);
+    toast('Analysis complete!', 'success');
+  } catch (e) { toast(e.message, 'error'); }
+  finally { btn.classList.remove('loading'); btn.disabled = false; }
+}
+
+// ─── Render Results ───
+function renderResults(d) {
+  const c = document.getElementById('results');
+  const isYT = d.url && (d.url.includes('youtube') || d.url.includes('youtu.be'));
+  const vid = isYT ? d.url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1] : null;
+
+  let h = `<div class="result-card"><div class="card-label">Analysis</div>
+    <h2 class="result-title">${esc(d.title)}</h2>
+    <p class="result-tldr">${esc(d.tldr)}</p>
+    <div class="result-meta">${(d.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}
+    ${d.difficulty?`<span class="tag difficulty">${esc(d.difficulty)}</span>`:''}</div></div>`;
+
+  h += `<div class="result-card"><div class="card-label">Key Insights</div><ul class="insight-list">
+    ${(d.key_insights||[]).map((x,i)=>`<li class="insight-item"><span class="insight-num">${i+1}</span><span>${esc(x)}</span></li>`).join('')}</ul></div>`;
+
+  h += `<div class="result-card"><div class="card-label">Flashcards · ${(d.flashcards||[]).length}</div><div class="flashcards-grid">
+    ${(d.flashcards||[]).map(fc=>`<div class="fc-preview" onclick="this.classList.toggle('revealed')">
+    <div class="fc-q">${esc(fc.q)}</div><div class="fc-a">${esc(fc.a)}</div></div>`).join('')}</div></div>`;
+
+  if (d.timestamps?.length) {
+    h += `<div class="result-card"><div class="card-label">Timestamps</div><ul class="ts-list">
+    ${d.timestamps.map(ts=>`<li class="ts-item"><span class="ts-time" ${vid?`onclick="window.open('https://youtube.com/watch?v=${vid}&t=${tsToSec(ts.time)}','_blank')"`:''}>
+    ${esc(ts.time)}</span><span>${esc(ts.label)}</span></li>`).join('')}</ul></div>`;
+  }
+
+  if (d.action_items?.length) {
+    h += `<div class="result-card"><div class="card-label">Action Items</div><ul class="action-list">
+    ${d.action_items.map(a=>`<li class="action-item"><span class="action-check" onclick="this.classList.toggle('done')"></span><span>${esc(a)}</span></li>`).join('')}</ul></div>`;
+  }
+
+  h += `<div class="result-card"><div class="result-actions">
+    <button class="action-btn primary" onclick="saveToLibrary()"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 3h10a2 2 0 012 2v12l-7-3-7 3V5a2 2 0 012-2z"/></svg>Save</button>
+    <button class="action-btn" onclick="startQuizFromResults()"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 2a6 6 0 00-2 11.65V16a2 2 0 004 0v-2.35A6 6 0 0010 2z"/></svg>Quiz</button>
+    <button class="action-btn" onclick="downloadMd()"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 3v10m-3-3l3 3 3-3M4 14v2h12v-2"/></svg>.md</button>
+    </div></div>`;
+
+  c.innerHTML = h;
+  c.classList.add('visible');
+  c.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s||''; return d.innerHTML; }
+function tsToSec(ts) { const p = ts.split(':').map(Number); return p.length===3?p[0]*3600+p[1]*60+p[2]:p.length===2?p[0]*60+p[1]:p[0]||0; }
+
+// ─── Save / Download / Library ───
+function saveToLibrary() {
+  if (!currentAnalysis) return;
+  if (library.find(a => a.title === currentAnalysis.title && a.analyzed_at === currentAnalysis.analyzed_at))
+    return toast('Already saved', 'error');
+  library.unshift({ ...currentAnalysis, id: Date.now().toString(36) });
+  localStorage.setItem('pm_library', JSON.stringify(library));
+  toast('Saved!', 'success');
+  updateQuizBadge();
+}
+
+function downloadMd() {
+  if (!currentAnalysis) return;
+  const d = currentAnalysis;
+  let md = `# ${d.title}\n\n> ${d.tldr}\n\n**Tags:** ${(d.tags||[]).join(', ')} | **Difficulty:** ${d.difficulty||'N/A'} | **Model:** ${d.model_used}\n\n---\n\n## Key Insights\n\n`;
+  (d.key_insights||[]).forEach((x,i) => { md += `${i+1}. ${x}\n`; });
+  md += `\n## Flashcards\n\n`;
+  (d.flashcards||[]).forEach((fc,i) => { md += `### Q${i+1}: ${fc.q}\n**A:** ${fc.a}\n\n`; });
+  if (d.timestamps?.length) { md += `## Timestamps\n\n`; d.timestamps.forEach(ts => { md += `- **${ts.time}** — ${ts.label}\n`; }); md += '\n'; }
+  if (d.action_items?.length) { md += `## Action Items\n\n`; d.action_items.forEach(a => { md += `- [ ] ${a}\n`; }); }
+  md += `\n---\n*Generated by PodMemory on ${new Date().toLocaleDateString()}*\n`;
+  const blob = new Blob([md], { type: 'text/markdown' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = `${(d.title||'analysis').replace(/[^a-zA-Z0-9]/g,'_').substring(0,50)}.md`; a.click();
+  URL.revokeObjectURL(a.href); toast('Downloaded!', 'success');
+}
+
+function renderLibrary(filter = '') {
+  const grid = document.getElementById('libraryGrid');
+  const q = filter.toLowerCase();
+  const filtered = library.filter(a => !q || a.title.toLowerCase().includes(q) || (a.tags||[]).some(t=>t.toLowerCase().includes(q)));
+  if (!filtered.length) { grid.innerHTML = `<div class="empty-state"><h3>${q?'No matches':'Empty library'}</h3><p>${q?'Try another search':'Analyze a video to get started.'}</p></div>`; return; }
+  grid.innerHTML = filtered.map(a => `<div class="lib-card" onclick="viewAnalysis('${a.id}')">
+    <div class="lib-card-title">${esc(a.title)}</div>
+    <div class="lib-card-meta"><span>${(a.flashcards||[]).length} cards</span><span>${a.analyzed_at?new Date(a.analyzed_at).toLocaleDateString():''}</span></div>
+    <div class="lib-card-tags">${(a.tags||[]).slice(0,4).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>
+    <button class="lib-delete" onclick="event.stopPropagation();deleteFromLibrary('${a.id}')" title="Delete">
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 6l8 8M6 14l8-8"/></svg></button></div>`).join('');
+}
+
+document.getElementById('librarySearch').oninput = e => renderLibrary(e.target.value);
+
+function viewAnalysis(id) {
+  const a = library.find(x=>x.id===id); if (!a) return;
+  currentAnalysis = a; switchTab('analyze');
+  setTimeout(() => renderResults(a), 100);
+}
+
+function deleteFromLibrary(id) {
+  library = library.filter(a=>a.id!==id);
+  localStorage.setItem('pm_library', JSON.stringify(library));
+  Object.keys(srData).forEach(k => { if (k.startsWith(id+':')) delete srData[k]; });
+  localStorage.setItem('pm_sr', JSON.stringify(srData));
+  renderLibrary(document.getElementById('librarySearch').value);
+  updateQuizBadge(); toast('Deleted');
+}
+
+document.getElementById('exportBtn').onclick = () => {
+  const blob = new Blob([JSON.stringify({library,srData,exported_at:new Date().toISOString()},null,2)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `podmemory_${new Date().toISOString().slice(0,10)}.json`; a.click();
+  URL.revokeObjectURL(a.href); toast('Exported!', 'success');
+};
+
+document.getElementById('importBtn').onclick = () => document.getElementById('importFile').click();
+document.getElementById('importFile').onchange = e => {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (data.library) { library = data.library; localStorage.setItem('pm_library', JSON.stringify(library)); }
+      if (data.srData) { srData = data.srData; localStorage.setItem('pm_sr', JSON.stringify(srData)); }
+      renderLibrary(); updateQuizBadge();
+      toast(`Imported ${library.length} analyses`, 'success');
+    } catch { toast('Invalid file', 'error'); }
+  };
+  reader.readAsText(file); e.target.value = '';
+};
+
+// ─── SM-2 ───
+function sm2(card, quality) {
+  let { ef=2.5, interval=0, repetitions=0 } = card;
+  if (quality >= 3) { interval = repetitions===0?1:repetitions===1?6:Math.round(interval*ef); repetitions++; }
+  else { repetitions=0; interval=1; }
+  ef = Math.max(1.3, ef + (0.1-(5-quality)*(0.08+(5-quality)*0.02)));
+  return { ef, interval, repetitions, nextReview: Date.now()+interval*86400000 };
+}
+
+function getDueCards() {
+  const now = Date.now(), due = [];
+  library.forEach(a => { (a.flashcards||[]).forEach((fc,i) => {
+    const key = a.id+':'+i, sr = srData[key];
+    if (!sr || sr.nextReview <= now) due.push({ key, q:fc.q, a:fc.a, sr: sr||{ef:2.5,interval:0,repetitions:0,nextReview:0}, source:a.title });
+  }); });
+  return due;
+}
+
+function updateQuizBadge() {
+  const due = getDueCards(), badge = document.getElementById('quizBadge');
+  badge.textContent = due.length;
+  badge.classList.toggle('visible', due.length > 0);
+}
+
+function initQuiz() {
+  const due = getDueCards();
+  const cont = document.getElementById('quizContainer'), comp = document.getElementById('quizComplete'), empty = document.getElementById('quizEmpty');
+  comp.classList.remove('visible');
+  if (!due.length) { cont.style.display='none'; empty.style.display=''; return; }
+  empty.style.display='none'; cont.style.display='';
+  quizSession = { cards: due.sort(()=>Math.random()-0.5).slice(0,20), index:0, correct:0, total: Math.min(due.length,20) };
+  showQuizCard();
+}
+
+function showQuizCard() {
+  if (!quizSession || quizSession.index >= quizSession.total) return finishQuiz();
+  const c = quizSession.cards[quizSession.index];
+  document.getElementById('quizQ').textContent = c.q;
+  document.getElementById('quizA').textContent = c.a;
+  document.getElementById('quizCard').classList.remove('flipped');
+  document.getElementById('quizRatings').classList.remove('visible');
+  document.getElementById('quizHint').style.display = '';
+  document.getElementById('quizCardLabel').textContent = 'Question';
+  document.getElementById('quizProgressText').textContent = `Card ${quizSession.index+1} / ${quizSession.total}`;
+  document.getElementById('quizSource').textContent = (c.source||'').substring(0,30);
+  document.getElementById('quizProgressFill').style.width = ((quizSession.index/quizSession.total)*100)+'%';
+}
+
+document.getElementById('quizCard').onclick = () => {
+  const card = document.getElementById('quizCard');
+  if (card.classList.contains('flipped')) return;
+  card.classList.add('flipped');
+  document.getElementById('quizCardLabel').textContent = 'Answer';
+  document.getElementById('quizHint').style.display = 'none';
+  document.getElementById('quizRatings').classList.add('visible');
+};
+
+document.querySelectorAll('.rate-btn').forEach(btn => {
+  btn.onclick = () => {
+    if (!quizSession) return;
+    const q = parseInt(btn.dataset.quality), c = quizSession.cards[quizSession.index];
+    srData[c.key] = sm2(c.sr, q);
+    localStorage.setItem('pm_sr', JSON.stringify(srData));
+    if (q >= 3) quizSession.correct++;
+    quizSession.index++; showQuizCard();
+  };
+});
+
+function finishQuiz() {
+  document.getElementById('quizContainer').style.display = 'none';
+  document.getElementById('quizComplete').classList.add('visible');
+  document.getElementById('statReviewed').textContent = quizSession.total;
+  document.getElementById('statCorrect').textContent = quizSession.correct;
+  document.getElementById('statAccuracy').textContent = Math.round((quizSession.correct/quizSession.total)*100)+'%';
+  updateQuizBadge();
+}
+
+function startQuizFromResults() {
+  if (!currentAnalysis) return;
+  if (!library.find(a=>a.id===currentAnalysis.id)) saveToLibrary();
+  switchTab('quiz');
+}
+
+// ─── Keyboard ───
+document.addEventListener('keydown', e => {
+  if (e.key==='Enter' && !e.shiftKey && document.getElementById('screenAnalyze').classList.contains('active') && document.activeElement.tagName!=='TEXTAREA') { e.preventDefault(); analyze(); }
+  if (e.key===' ' && document.getElementById('screenQuiz').classList.contains('active')) { e.preventDefault(); document.getElementById('quizCard').click(); }
+  if (['1','2','3','4'].includes(e.key) && document.getElementById('screenQuiz').classList.contains('active')) {
+    const map={'1':'0','2':'2','3':'3','4':'5'};
+    const btn = document.querySelector(`.rate-btn[data-quality="${map[e.key]}"]`);
+    if (btn && document.getElementById('quizRatings').classList.contains('visible')) btn.click();
+  }
+});
+
+updateQuizBadge();
+</script>
+</body>
+</html>

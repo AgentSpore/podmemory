@@ -1,0 +1,13 @@
+{
+  "name": "PodMemory",
+  "short_name": "PodMemory",
+  "description": "Extract knowledge from any video. AI analysis, flashcards, spaced repetition.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#08080c",
+  "theme_color": "#08080c",
+  "icons": [
+    { "src": "/static/icon-192.svg", "sizes": "192x192", "type": "image/svg+xml" },
+    { "src": "/static/icon-192.svg", "sizes": "512x512", "type": "image/svg+xml" }
+  ]
+}
