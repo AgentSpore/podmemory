@@ -42,14 +42,14 @@ async def transcribe_with_groq(audio_data: bytes, filename: str = "audio.mp3") -
                         data={"model": model, "response_format": "verbose_json"},
                     )
 
-            if resp.status_code in (429, 503):
+            if resp.status_code in (403, 429, 503):
                 logger.warning("Groq {} returned {} — trying next model", model, resp.status_code)
                 await asyncio.sleep(3)
                 continue
 
             if resp.status_code != 200:
                 err = resp.json().get("error", {}).get("message", resp.text[:200])
-                raise RuntimeError(f"Groq error: {err}")
+                raise RuntimeError(f"Groq error ({resp.status_code}): {err}")
 
             data = resp.json()
             text = data.get("text", "")

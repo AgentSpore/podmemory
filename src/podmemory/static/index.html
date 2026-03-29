@@ -1423,6 +1423,64 @@ async function analyze() {
           throw new Error(evt.message);
         }
 
+        // Groq unavailable — fallback to browser Whisper
+        if (evt.stage === 'groq_fallback' && evt.data?.audio_url) {
+          wsTxt.textContent = 'Server transcription unavailable. Transcribing in browser...';
+          bar.style.width = '50%';
+
+          const audioResp = await fetch(evt.data.audio_url);
+          if (!audioResp.ok) throw new Error('Failed to download audio for browser transcription');
+          const audioBlob = await audioResp.blob();
+          bar.style.width = '55%';
+          wsTxt.textContent = 'Loading Whisper AI model (~50MB, cached)...';
+
+          if (!window._whisperPipeline) {
+            const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.4.1');
+            window._whisperPipeline = await pipeline('automatic-speech-recognition', 'onnx-community/whisper-base', { dtype: 'q8' });
+          }
+          bar.style.width = '65%';
+          wsTxt.textContent = 'Transcribing in browser...';
+
+          const arrayBuf = await audioBlob.arrayBuffer();
+          const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+          const audioBuf = await audioCtx.decodeAudioData(arrayBuf);
+          const audioData = audioBuf.getChannelData(0);
+          audioCtx.close();
+
+          const whisperResult = await window._whisperPipeline(audioData, { chunk_length_s: 30, stride_length_s: 5 });
+          bar.style.width = '80%';
+          wsTxt.textContent = 'Browser transcription complete. Analyzing...';
+
+          text = await showTranscriptReview(whisperResult.text);
+
+          // Re-analyze with transcribed text
+          const reResp = await fetch('/api/analyze-stream', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: '', text, model }),
+          });
+          const reReader = reResp.body.getReader();
+          let reBuf = '';
+          while (true) {
+            const { done: reDone, value: reVal } = await reReader.read();
+            if (reDone) break;
+            reBuf += decoder.decode(reVal, { stream: true });
+            const reLines = reBuf.split('\n');
+            reBuf = reLines.pop() || '';
+            for (const rl of reLines) {
+              if (!rl.startsWith('data: ')) continue;
+              try {
+                const re2 = JSON.parse(rl.slice(6).trim());
+                bar.style.width = Math.max(80, re2.progress) + '%';
+                wsTxt.textContent = re2.message;
+                if (re2.stage === 'done' && re2.data) finalData = re2.data;
+                if (re2.stage === 'error') throw new Error(re2.message);
+              } catch (parseErr) { if (parseErr.message !== 'error') continue; throw parseErr; }
+            }
+          }
+          break;
+        }
+
         if (evt.stage === 'done' && evt.data) {
           finalData = evt.data;
         }

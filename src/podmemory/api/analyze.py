@@ -22,7 +22,7 @@ from ..services.transcript import (
     get_youtube_transcript,
     from_user_paste,
 )
-from ..services.audio_transcript import transcribe_with_groq, download_youtube_audio, transcribe_url
+from ..services.audio_transcript import download_audio, transcribe_with_groq, download_youtube_audio, transcribe_url
 
 router = APIRouter(prefix="/api", tags=["analysis"])
 
@@ -36,6 +36,10 @@ _YT_MIN_INTERVAL = 5
 
 # YouTube video ID: exactly 11 chars, alphanumeric + dash + underscore
 _YT_VIDEO_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{11}$")
+
+# Temp audio files for browser Whisper fallback (when Groq is unavailable)
+import uuid
+_temp_audio: dict[str, Path] = {}  # id → path, cleaned up after download
 
 
 async def _fetch_free_models() -> list[dict]:
@@ -79,6 +83,15 @@ async def get_config():
         "models": models,
         "has_api_key": bool(settings.openrouter_api_key),
     }
+
+
+@router.get("/temp-audio/{audio_id}")
+async def get_temp_audio(audio_id: str):
+    """Serve temp audio file for browser Whisper fallback."""
+    path = _temp_audio.pop(audio_id, None)
+    if not path or not path.exists():
+        raise HTTPException(404, "Audio not found or already downloaded")
+    return FileResponse(path, media_type="audio/mpeg", filename="audio.mp3")
 
 
 @router.get("/youtube-audio/{video_id}")
@@ -221,7 +234,6 @@ async def analyze_video_stream(req: AnalyzeRequest):
                 yield _sse_event("downloading_audio", 10, f"Downloading audio from {platform}...")
 
                 try:
-                    from ..services.audio_transcript import download_audio
                     audio_path = await download_audio(req.url)
                 except Exception as e:
                     logger.error("Download failed for {} ({}): {}", req.url, platform, e)
@@ -236,7 +248,6 @@ async def analyze_video_stream(req: AnalyzeRequest):
                     if size_mb > 25:
                         yield _sse_event("error", 0, "Audio too large (>25MB). Try a shorter video.")
                         return
-                    from ..services.audio_transcript import transcribe_with_groq
                     result = await transcribe_with_groq(audio_data, f"{platform}_audio.m4a")
                     result["source"] = f"{platform}_groq_whisper"
                     transcript = from_user_paste(result["text"], result.get("language", "unknown"))
@@ -244,14 +255,21 @@ async def analyze_video_stream(req: AnalyzeRequest):
                     yield _sse_event("transcription_ready", 60, f"Transcribed ({len(result['text'])} chars)")
                 except RuntimeError as e:
                     msg = str(e)
+                    if "GROQ_RATE_LIMIT" in msg or "Forbidden" in msg or "403" in msg:
+                        # Groq unavailable — offer audio for browser Whisper
+                        audio_id = uuid.uuid4().hex[:12]
+                        _temp_audio[audio_id] = audio_path
+                        yield _sse_event("groq_fallback", 45, "Server transcription unavailable. Switching to browser...", {"audio_url": f"/api/temp-audio/{audio_id}"})
+                        return
                     yield _sse_event("error", 0, f"Transcription failed: {msg}")
                     return
                 finally:
-                    try:
-                        audio_path.unlink(missing_ok=True)
-                        audio_path.parent.rmdir()
-                    except OSError:
-                        pass
+                    if transcript:
+                        try:
+                            audio_path.unlink(missing_ok=True)
+                            audio_path.parent.rmdir()
+                        except OSError:
+                            pass
 
             elif req.text:
                 transcript = from_user_paste(req.text)
