@@ -4,17 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import json
-import logging
 import re
 import time
 from collections import OrderedDict
 
 import httpx
+from loguru import logger
 
 from ..core.config import settings
 from .transcript import Transcript
 
-logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are PodMemory — an expert knowledge extraction AI.
 Your job: take a video transcript and extract maximum learning value from it.
@@ -113,12 +112,11 @@ def smart_truncate(text: str, max_chars: int = 14000) -> str:
         head = head[: last_sentence + 1]
 
     tail = text[-tail_budget:]
-    first_sentence = min(
-        (tail.find(". ") if tail.find(". ") >= 0 else 9999),
-        (tail.find("! ") if tail.find("! ") >= 0 else 9999),
-        (tail.find("? ") if tail.find("? ") >= 0 else 9999),
-        (tail.find("\n") if tail.find("\n") >= 0 else 9999),
-    )
+    sentence_positions = [
+        pos for pos in (tail.find(". "), tail.find("! "), tail.find("? "), tail.find("\n"))
+        if pos >= 0
+    ]
+    first_sentence = min(sentence_positions) if sentence_positions else tail_budget
     if first_sentence < tail_budget * 0.5:
         tail = tail[first_sentence + 2 :]
 
@@ -185,7 +183,7 @@ async def analyze_transcript(transcript: Transcript, model: str = "") -> dict:
     ck = _cache_key(transcript.text, used_model)
     cached = _cache_get(ck)
     if cached:
-        logger.info("Cache hit for model=%s", used_model)
+        logger.info("Cache hit for model={}", used_model)
         return cached
 
     # Smart truncation (preserves beginning + end)
@@ -227,7 +225,7 @@ Generate a comprehensive analysis with flashcards for spaced repetition."""
     for i, m in enumerate(models_to_try):
         try:
             if i > 0:
-                logger.warning("Fallback to model: %s", m)
+                logger.warning("Fallback to model: {}", m)
 
             content = await _call_llm(m, messages)
             result = _parse_llm_response(content, m, transcript)
@@ -236,27 +234,17 @@ Generate a comprehensive analysis with flashcards for spaced repetition."""
             _cache_put(ck, result)
             return result
 
-        except AnalysisError as e:
-            last_error = e
+        except (AnalysisError, json.JSONDecodeError, httpx.TimeoutException, Exception) as e:
+            if isinstance(e, AnalysisError):
+                last_error = e
+            elif isinstance(e, json.JSONDecodeError):
+                last_error = AnalysisError(f"Failed to parse LLM response as JSON: {e}")
+            elif isinstance(e, httpx.TimeoutException):
+                last_error = AnalysisError("LLM request timed out.")
+            else:
+                last_error = AnalysisError(f"Failed to connect to AI: {e}")
             if i < len(models_to_try) - 1:
-                logger.warning("Model %s failed: %s — trying next", m, e)
-                continue
-            raise
-        except json.JSONDecodeError as e:
-            last_error = AnalysisError(f"Failed to parse LLM response as JSON: {e}")
-            if i < len(models_to_try) - 1:
-                logger.warning("Model %s returned invalid JSON — trying next", m)
-                continue
-            raise last_error
-        except httpx.TimeoutException:
-            last_error = AnalysisError("LLM request timed out.")
-            if i < len(models_to_try) - 1:
-                logger.warning("Model %s timed out — trying next", m)
-                continue
-            raise last_error
-        except Exception as e:
-            last_error = AnalysisError(f"Failed to connect to AI: {e}")
-            if i < len(models_to_try) - 1:
+                logger.warning("Model {} failed: {} — trying next", m, last_error)
                 continue
             raise last_error
 

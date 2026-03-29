@@ -11,15 +11,14 @@ Used only via explicit /api/youtube-audio/{video_id} endpoint.
 from __future__ import annotations
 
 import asyncio
-import logging
+import os
 import tempfile
 from pathlib import Path
 
 import httpx
+from loguru import logger
 
 from ..core.config import settings
-
-logger = logging.getLogger(__name__)
 
 
 async def transcribe_with_groq(audio_data: bytes, filename: str = "audio.mp3") -> dict:
@@ -27,17 +26,20 @@ async def transcribe_with_groq(audio_data: bytes, filename: str = "audio.mp3") -
     if not settings.groq_api_key:
         raise RuntimeError("NO_GROQ_KEY")
 
-    tmp = Path(tempfile.mktemp(suffix=Path(filename).suffix or ".mp3"))
-    tmp.write_bytes(audio_data)
-
+    # mkstemp is safe (atomic create + open), unlike deprecated mktemp
+    fd, tmp_path = tempfile.mkstemp(suffix=Path(filename).suffix or ".mp3")
+    tmp = Path(tmp_path)
     try:
+        os.write(fd, audio_data)
+        os.close(fd)
+
         async with httpx.AsyncClient(timeout=120) as client:
             with open(tmp, "rb") as f:
                 resp = await client.post(
                     "https://api.groq.com/openai/v1/audio/transcriptions",
                     headers={"Authorization": f"Bearer {settings.groq_api_key}"},
                     files={"file": (tmp.name, f, "audio/mpeg")},
-                    data={"model": "whisper-large-v3", "response_format": "verbose_json"},
+                    data={"model": "whisper-large-v3-turbo", "response_format": "verbose_json"},
                 )
 
         if resp.status_code == 429:
@@ -57,10 +59,10 @@ async def transcribe_with_groq(audio_data: bytes, filename: str = "audio.mp3") -
         tmp.unlink(missing_ok=True)
 
 
-async def download_youtube_audio(video_id: str) -> Path:
-    """Download audio from YouTube via yt-dlp (fast, reliable).
+async def download_audio(url: str) -> Path:
+    """Download audio from any yt-dlp supported URL (YouTube, VK, Rutube, etc.).
 
-    Warning: may fail on datacenter IPs (YouTube blocks them).
+    Uses ffmpeg postprocessor to extract audio-only (~2-5 MB instead of 100+ MB video).
     """
     def _download():
         import yt_dlp
@@ -69,26 +71,66 @@ async def download_youtube_audio(video_id: str) -> Path:
         output_path = str(Path(tmp_dir) / "audio.%(ext)s")
 
         ydl_opts = {
-            "format": "bestaudio[ext=m4a]/bestaudio/best",
+            "format": "bestaudio[ext=m4a]/bestaudio/worst",
             "outtmpl": output_path,
             "quiet": True,
             "no_warnings": True,
             "extract_flat": False,
             "socket_timeout": 30,
+            "postprocessors": [{
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "64",
+            }],
+            # Limit to first 15 min of audio
+            "download_ranges": yt_dlp.utils.download_range_func(None, [(0, 900)]),
+            "force_keyframes_at_cuts": True,
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(
-                f"https://www.youtube.com/watch?v={video_id}",
-                download=True,
-            )
+            info = ydl.extract_info(url, download=True)
+            for f in Path(tmp_dir).iterdir():
+                if f.is_file() and f.suffix in (".mp3", ".m4a", ".ogg", ".opus", ".wav"):
+                    return f
             filename = ydl.prepare_filename(info)
             result = Path(filename)
-            if not result.exists():
-                for f in Path(tmp_dir).iterdir():
-                    if f.is_file():
-                        return f
-                raise RuntimeError("Download completed but file not found")
-            return result
+            if result.exists():
+                return result
+            mp3 = result.with_suffix(".mp3")
+            if mp3.exists():
+                return mp3
+            raise RuntimeError("Download completed but audio file not found")
 
     return await asyncio.to_thread(_download)
+
+
+async def download_youtube_audio(video_id: str) -> Path:
+    """Download audio from YouTube (convenience wrapper)."""
+    return await download_audio(f"https://www.youtube.com/watch?v={video_id}")
+
+
+async def transcribe_url(url: str, platform: str = "unknown") -> dict:
+    """Full server-side pipeline: yt-dlp download → Groq Whisper.
+
+    Returns {text, source, language} or raises RuntimeError.
+    """
+    logger.info("Downloading audio from {}: {}", platform, url)
+    audio_path = await download_audio(url)
+
+    try:
+        audio_data = audio_path.read_bytes()
+        size_mb = len(audio_data) / (1024 * 1024)
+        logger.info("Downloaded {:.1f} MB, transcribing with Groq...", size_mb)
+
+        if size_mb > 25:
+            raise RuntimeError("Audio too large (>25MB). Try a shorter video.")
+
+        result = await transcribe_with_groq(audio_data, f"{platform}_audio.m4a")
+        result["source"] = f"{platform}_groq_whisper"
+        return result
+    finally:
+        try:
+            audio_path.unlink(missing_ok=True)
+            audio_path.parent.rmdir()
+        except OSError:
+            pass

@@ -2,7 +2,7 @@
 
 Supported platforms:
 - YouTube (via youtube-transcript-api — instant, no API key needed)
-- 1000+ sites (via yt-dlp + Groq Whisper — needs GROQ_API_KEY)
+- VK Video, Rutube, and others (via yt-dlp + Groq Whisper)
 - Manual paste fallback
 """
 
@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+
+from loguru import logger
 
 # Noise patterns in YouTube auto-generated subtitles
 _NOISE_PATTERNS = re.compile(
@@ -43,6 +45,35 @@ def extract_youtube_id(url: str) -> str | None:
 
 def is_youtube_url(url: str) -> bool:
     return extract_youtube_id(url) is not None
+
+
+# Platforms supported via yt-dlp (audio download + Groq Whisper)
+_SUPPORTED_PLATFORMS = {
+    "vk": re.compile(r"(?:vk\.com/video|vkvideo\.ru|vk\.com/clip)", re.IGNORECASE),
+    "rutube": re.compile(r"rutube\.ru/video/", re.IGNORECASE),
+    "dzen": re.compile(r"dzen\.ru/(?:video|watch)", re.IGNORECASE),
+    "ok": re.compile(r"ok\.ru/video/", re.IGNORECASE),
+    "yandex_music": re.compile(r"music\.yandex\.(?:ru|com)/album/.+/track/", re.IGNORECASE),
+    "twitch": re.compile(r"(?:twitch\.tv/|clips\.twitch\.tv/)", re.IGNORECASE),
+    "vimeo": re.compile(r"vimeo\.com/\d+", re.IGNORECASE),
+    "soundcloud": re.compile(r"soundcloud\.com/", re.IGNORECASE),
+    "telegram": re.compile(r"t\.me/.+/\d+", re.IGNORECASE),
+    "rumble": re.compile(r"rumble\.com/", re.IGNORECASE),
+    "apple_podcasts": re.compile(r"podcasts\.apple\.com/", re.IGNORECASE),
+    "bilibili": re.compile(r"bilibili\.com/video/", re.IGNORECASE),
+    "coub": re.compile(r"coub\.com/view/", re.IGNORECASE),
+}
+
+
+def detect_platform(url: str) -> str | None:
+    """Detect video platform from URL. Returns platform name or None."""
+    if is_youtube_url(url):
+        return "youtube"
+    for name, pattern in _SUPPORTED_PLATFORMS.items():
+        if pattern.search(url):
+            return name
+    return None
+
 
 
 async def get_youtube_transcript(url: str) -> Transcript:
@@ -81,8 +112,8 @@ async def get_youtube_transcript(url: str) -> Transcript:
                 source = "youtube_manual"
                 lang = t.language_code
                 break
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Error iterating manual transcripts for {}: {}", video_id, e)
 
     if transcript_obj is None:
         try:
@@ -91,8 +122,8 @@ async def get_youtube_transcript(url: str) -> Transcript:
                 source = "youtube_auto"
                 lang = t.language_code
                 break
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Error iterating auto transcripts for {}: {}", video_id, e)
 
     if transcript_obj is None:
         raise ValueError(

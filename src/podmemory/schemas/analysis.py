@@ -17,6 +17,11 @@ class Timestamp(BaseModel):
     label: str
 
 
+class AnkiExportRequest(BaseModel):
+    title: str = "PodMemory Export"
+    flashcards: list[Flashcard]
+
+
 class AnalysisResponse(BaseModel):
     title: str
     tldr: str

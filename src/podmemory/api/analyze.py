@@ -1,22 +1,25 @@
-import logging
+import asyncio
+import random
+import re
 import tempfile
 import time
+from pathlib import Path
 
+import genanki
 import httpx
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse, Response
+from loguru import logger
 
 from ..core.config import settings
-from ..schemas.analysis import AnalyzeRequest, AnalysisResponse
+from ..schemas.analysis import AnalyzeRequest, AnalysisResponse, AnkiExportRequest
 from ..services.analyzer import analyze_transcript, AnalysisError
 from ..services.transcript import (
-    is_youtube_url,
+    detect_platform,
     get_youtube_transcript,
     from_user_paste,
 )
-from ..services.audio_transcript import transcribe_with_groq, download_youtube_audio
-
-logger = logging.getLogger(__name__)
+from ..services.audio_transcript import transcribe_with_groq, download_youtube_audio, transcribe_url
 
 router = APIRouter(prefix="/api", tags=["analysis"])
 
@@ -24,9 +27,12 @@ _models_cache: list[dict] = []
 _models_cache_ts: float = 0
 CACHE_TTL = 3600
 
-# Rate limiter for YouTube transcript API (datacenter IPs get banned easily)
+_yt_lock = asyncio.Lock()
 _yt_last_request: float = 0
-_YT_MIN_INTERVAL = 5  # seconds between YouTube requests
+_YT_MIN_INTERVAL = 5
+
+# YouTube video ID: exactly 11 chars, alphanumeric + dash + underscore
+_YT_VIDEO_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{11}$")
 
 
 async def _fetch_free_models() -> list[dict]:
@@ -53,7 +59,8 @@ async def _fetch_free_models() -> list[dict]:
             _models_cache = models
             _models_cache_ts = time.time()
             return models
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to fetch models: {}", e)
         return _models_cache or []
 
 
@@ -73,21 +80,22 @@ async def get_config():
 
 @router.get("/youtube-audio/{video_id}")
 async def get_youtube_audio(video_id: str):
-    """Download audio from YouTube via yt-dlp.
-
-    Not auto-triggered from /analyze — datacenter IPs get banned.
-    Available as explicit endpoint for frontend fallback.
-    """
+    """Download audio from YouTube via yt-dlp."""
+    if not _YT_VIDEO_ID_RE.match(video_id):
+        raise HTTPException(400, "Invalid video ID")
     try:
         audio_path = await download_youtube_audio(video_id)
         return FileResponse(audio_path, media_type="audio/mp4", filename=f"{video_id}.m4a")
     except Exception as e:
-        raise HTTPException(502, f"Failed to download audio: {e}")
+        logger.error("YouTube audio download failed for {}: {}", video_id, e)
+        raise HTTPException(502, "Failed to download audio")
 
 
 @router.post("/transcribe")
 async def transcribe_audio(file: UploadFile = File(...)):
     """Transcribe uploaded audio/video via Groq Whisper. Returns {text, source}."""
+    if file.size and file.size > 25 * 1024 * 1024:
+        raise HTTPException(400, "File too large (max 25MB)")
     data = await file.read()
     if not data:
         raise HTTPException(400, "Empty file")
@@ -102,7 +110,8 @@ async def transcribe_audio(file: UploadFile = File(...)):
             raise HTTPException(503, "GROQ_UNAVAILABLE")
         if msg == "GROQ_RATE_LIMIT":
             raise HTTPException(503, "GROQ_RATE_LIMIT")
-        raise HTTPException(502, msg)
+        logger.error("Transcription failed: {}", e)
+        raise HTTPException(502, "Transcription failed")
 
 
 @router.post("/analyze", response_model=AnalysisResponse)
@@ -111,34 +120,45 @@ async def analyze_video(req: AnalyzeRequest):
         raise HTTPException(400, "Provide a video URL or transcript text")
 
     transcript = None
+    platform = detect_platform(req.url) if req.url else None
 
-    if req.url and is_youtube_url(req.url):
-        # Rate limit YouTube requests (datacenter IPs get banned easily)
+    if req.url and platform == "youtube":
         global _yt_last_request
-        now = time.time()
-        wait = _YT_MIN_INTERVAL - (now - _yt_last_request)
-        if wait > 0:
-            import asyncio
-            await asyncio.sleep(wait)
-        _yt_last_request = time.time()
+        async with _yt_lock:
+            now = time.time()
+            wait = _YT_MIN_INTERVAL - (now - _yt_last_request)
+            if wait > 0:
+                await asyncio.sleep(wait)
+            _yt_last_request = time.time()
 
         try:
             transcript = await get_youtube_transcript(req.url)
         except (ValueError, Exception) as e:
-            err_msg = str(e)
-            logger.warning("YouTube transcript failed for %s: %s", req.url, err_msg)
+            logger.warning("YouTube subtitles failed for {}: {}", req.url, e)
             raise HTTPException(
                 400,
                 "NO_SUBTITLES: This video has no subtitles available. "
                 "Upload the audio/video file instead — it will be transcribed automatically."
             )
 
+    elif req.url and platform:
+        try:
+            result = await transcribe_url(req.url, platform)
+            transcript = from_user_paste(result["text"], result.get("language", "unknown"))
+            transcript.source = result["source"]
+        except RuntimeError as e:
+            msg = str(e)
+            if msg in ("NO_GROQ_KEY", "GROQ_RATE_LIMIT"):
+                raise HTTPException(503, f"GROQ_UNAVAILABLE: {msg}")
+            logger.error("Transcription failed for {} ({}): {}", req.url, platform, e)
+            raise HTTPException(502, f"Failed to transcribe {platform} video")
+
     elif req.text:
         transcript = from_user_paste(req.text)
     elif req.url:
         raise HTTPException(
             400,
-            "Only YouTube URLs are supported for auto-transcription. "
+            "Unsupported URL. Supported: YouTube, VK, Rutube, TikTok, Twitch, Vimeo, and more. "
             "For other videos, upload the audio/video file."
         )
     else:
@@ -150,23 +170,16 @@ async def analyze_video(req: AnalyzeRequest):
     try:
         result = await analyze_transcript(transcript, req.model)
     except AnalysisError as e:
-        raise HTTPException(502, str(e))
+        logger.error("Analysis failed: {}", e)
+        raise HTTPException(502, "Analysis failed. Try a different model.")
 
     return AnalysisResponse(**result)
 
 
 @router.post("/export/anki")
-async def export_anki(req: dict):
-    """Export flashcards as Anki .apkg file.
-
-    Expects: {"title": "...", "flashcards": [{"q": "...", "a": "..."}, ...]}
-    """
-    import genanki
-    import random
-
-    title = req.get("title", "PodMemory Export")
-    flashcards = req.get("flashcards", [])
-    if not flashcards:
+async def export_anki(req: AnkiExportRequest):
+    """Export flashcards as Anki .apkg file."""
+    if not req.flashcards:
         raise HTTPException(400, "No flashcards to export")
 
     model_id = random.randrange(1 << 30, 1 << 31)
@@ -183,20 +196,20 @@ async def export_anki(req: dict):
         }],
     )
 
-    deck = genanki.Deck(deck_id, title)
-    for fc in flashcards:
-        note = genanki.Note(model=anki_model, fields=[fc["q"], fc["a"]])
+    deck = genanki.Deck(deck_id, req.title)
+    for fc in req.flashcards:
+        note = genanki.Note(model=anki_model, fields=[fc.q, fc.a])
         deck.add_note(note)
 
     tmp = tempfile.NamedTemporaryFile(suffix=".apkg", delete=False)
-    genanki.Package(deck).write_to_file(tmp.name)
-    tmp.close()
+    try:
+        genanki.Package(deck).write_to_file(tmp.name)
+        tmp.close()
+        data = Path(tmp.name).read_bytes()
+    finally:
+        Path(tmp.name).unlink(missing_ok=True)
 
-    data = open(tmp.name, "rb").read()
-    import os
-    os.unlink(tmp.name)
-
-    safe_title = "".join(c for c in title if c.isalnum() or c in " -_")[:50].strip() or "podmemory"
+    safe_title = "".join(c for c in req.title if c.isalnum() or c in " -_")[:50].strip() or "podmemory"
     return Response(
         content=data,
         media_type="application/octet-stream",
