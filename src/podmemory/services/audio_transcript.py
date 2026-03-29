@@ -21,40 +21,55 @@ from loguru import logger
 from ..core.config import settings
 
 
-async def transcribe_with_groq(audio_data: bytes, filename: str = "audio.mp3") -> dict:
-    """Transcribe via Groq Whisper API. Returns {text, source, language}."""
+async def transcribe_with_groq(audio_data: bytes, filename: str = "audio.mp3", retries: int = 2) -> dict:
+    """Transcribe via Groq Whisper API with retry. Returns {text, source, language}."""
     if not settings.groq_api_key:
         raise RuntimeError("NO_GROQ_KEY")
 
-    # mkstemp is safe (atomic create + open), unlike deprecated mktemp
     fd, tmp_path = tempfile.mkstemp(suffix=Path(filename).suffix or ".mp3")
     tmp = Path(tmp_path)
     try:
         os.write(fd, audio_data)
         os.close(fd)
 
-        async with httpx.AsyncClient(timeout=120) as client:
-            with open(tmp, "rb") as f:
-                resp = await client.post(
-                    "https://api.groq.com/openai/v1/audio/transcriptions",
-                    headers={"Authorization": f"Bearer {settings.groq_api_key}"},
-                    files={"file": (tmp.name, f, "audio/mpeg")},
-                    data={"model": "whisper-large-v3-turbo", "response_format": "verbose_json"},
-                )
+        last_error = None
+        for attempt in range(retries + 1):
+            async with httpx.AsyncClient(timeout=120) as client:
+                with open(tmp, "rb") as f:
+                    resp = await client.post(
+                        "https://api.groq.com/openai/v1/audio/transcriptions",
+                        headers={"Authorization": f"Bearer {settings.groq_api_key}"},
+                        files={"file": (tmp.name, f, "audio/mpeg")},
+                        data={"model": "whisper-large-v3-turbo", "response_format": "verbose_json"},
+                    )
 
-        if resp.status_code == 429:
-            raise RuntimeError("GROQ_RATE_LIMIT")
+            if resp.status_code == 429:
+                if attempt < retries:
+                    wait = 5 * (attempt + 1)
+                    logger.warning("Groq rate limit hit, retrying in {}s (attempt {}/{})", wait, attempt + 1, retries)
+                    await asyncio.sleep(wait)
+                    continue
+                raise RuntimeError("GROQ_RATE_LIMIT")
 
-        if resp.status_code != 200:
-            err = resp.json().get("error", {}).get("message", resp.text[:200])
-            raise RuntimeError(f"Groq error: {err}")
+            if resp.status_code == 503:
+                if attempt < retries:
+                    logger.warning("Groq 503, retrying in 3s (attempt {}/{})", attempt + 1, retries)
+                    await asyncio.sleep(3)
+                    continue
+                raise RuntimeError("GROQ_RATE_LIMIT")
 
-        data = resp.json()
-        text = data.get("text", "")
-        if not text:
-            raise RuntimeError("Empty transcription")
+            if resp.status_code != 200:
+                err = resp.json().get("error", {}).get("message", resp.text[:200])
+                raise RuntimeError(f"Groq error: {err}")
 
-        return {"text": text, "source": "groq_whisper", "language": data.get("language", "unknown")}
+            data = resp.json()
+            text = data.get("text", "")
+            if not text:
+                raise RuntimeError("Empty transcription")
+
+            return {"text": text, "source": "groq_whisper", "language": data.get("language", "unknown")}
+
+        raise last_error or RuntimeError("GROQ_RATE_LIMIT")
     finally:
         tmp.unlink(missing_ok=True)
 

@@ -209,9 +209,14 @@ async def export_anki(req: AnkiExportRequest):
     finally:
         Path(tmp.name).unlink(missing_ok=True)
 
-    safe_title = "".join(c for c in req.title if c.isalnum() or c in " -_")[:50].strip() or "podmemory"
+    # HTTP headers only support latin-1; use ASCII-safe filename + RFC 5987 for unicode
+    ascii_title = "".join(c for c in req.title if c.isascii() and (c.isalnum() or c in " -_"))[:50].strip() or "podmemory"
+    from urllib.parse import quote
+    utf8_title = quote(req.title[:50], safe="")
     return Response(
         content=data,
         media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{safe_title}.apkg"'},
+        headers={
+            "Content-Disposition": f"attachment; filename=\"{ascii_title}.apkg\"; filename*=UTF-8''{utf8_title}.apkg",
+        },
     )
