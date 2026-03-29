@@ -1374,34 +1374,70 @@ async function analyze() {
   btn.classList.add('loading');
   btn.disabled = true;
 
+  const statusEl = document.getElementById('fileStatus');
+  const statusTxt = document.getElementById('fileStatusText');
+  const progress = document.getElementById('whisperProgress');
+  const bar = document.getElementById('whisperBar');
+  const wsTxt = document.getElementById('whisperStatusText');
+
+  statusEl.style.display = '';
+  progress.style.display = '';
+  bar.style.width = '5%';
+  statusTxt.textContent = '';
+  wsTxt.textContent = 'Starting...';
+
   try {
-    let resp = await fetch('/api/analyze', {
+    const resp = await fetch('/api/analyze-stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url, text, model }),
     });
 
-    // No subtitles → show friendly message with file upload hint
-    if (!resp.ok && url && (url.includes('youtube') || url.includes('youtu.be'))) {
-      let errData;
-      try { errData = await resp.clone().json(); } catch { errData = {detail: ''}; }
-      const errMsg = (errData.detail || '');
-      if (errMsg.includes('NO_SUBTITLES')) {
-        const statusEl = document.getElementById('fileStatus');
-        const statusTxt = document.getElementById('fileStatusText');
-        statusEl.style.display = '';
-        statusTxt.innerHTML = '⚠️ No subtitles for this video. <b>Download the video/audio and drop it above</b> — it will be transcribed automatically via Whisper.';
-        document.getElementById('whisperProgress').style.display = 'none';
-        throw new Error('No subtitles available for this video. Upload the audio/video file instead.');
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let finalData = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (!raw) continue;
+        let evt;
+        try { evt = JSON.parse(raw); } catch { continue; }
+
+        bar.style.width = evt.progress + '%';
+        wsTxt.textContent = evt.message;
+
+        if (evt.stage === 'error') {
+          if (evt.message.includes('NO_SUBTITLES')) {
+            statusTxt.innerHTML = '⚠️ No subtitles for this video. <b>Drop the audio/video file above</b> — it will be transcribed automatically.';
+          }
+          throw new Error(evt.message);
+        }
+
+        if (evt.stage === 'done' && evt.data) {
+          finalData = evt.data;
+        }
       }
     }
 
-    if (!resp.ok) { let err; try { err = await resp.json(); } catch { err = {detail: 'Analysis failed'}; } throw new Error(err.detail || 'Analysis failed'); }
-    currentAnalysis = await resp.json();
+    if (!finalData) throw new Error('Analysis failed — no result received');
+    bar.style.width = '100%';
+    wsTxt.textContent = 'Done!';
+    currentAnalysis = finalData;
     currentAnalysis.url = url;
     currentAnalysis.analyzed_at = new Date().toISOString();
     renderResults(currentAnalysis);
     toast(t('analysisComplete'), 'success');
+    setTimeout(() => { progress.style.display = 'none'; statusEl.style.display = 'none'; }, 2000);
   } catch (e) { toast(e.message, 'error'); }
   finally { btn.classList.remove('loading'); btn.disabled = false; }
 }

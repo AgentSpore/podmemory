@@ -14,6 +14,7 @@ dependencies = [
     "yt-dlp>=2024.0",
     "genanki>=0.13",
     "loguru>=0.7",
+    "sse-starlette>=2.0",
 ]
 
 [project.optional-dependencies]

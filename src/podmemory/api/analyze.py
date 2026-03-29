@@ -1,15 +1,18 @@
 import asyncio
+import json as json_lib
 import random
 import re
 import tempfile
 import time
 from pathlib import Path
+from typing import AsyncGenerator
 
 import genanki
 import httpx
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import FileResponse, Response
 from loguru import logger
+from sse_starlette.sse import EventSourceResponse
 
 from ..core.config import settings
 from ..schemas.analysis import AnalyzeRequest, AnalysisResponse, AnkiExportRequest
@@ -174,6 +177,113 @@ async def analyze_video(req: AnalyzeRequest):
         raise HTTPException(502, "Analysis failed. Try a different model.")
 
     return AnalysisResponse(**result)
+
+
+def _sse_event(stage: str, progress: int, message: str, data: dict | None = None) -> str:
+    payload = {"stage": stage, "progress": progress, "message": message}
+    if data:
+        payload["data"] = data
+    return json_lib.dumps(payload, ensure_ascii=False)
+
+
+@router.post("/analyze-stream")
+async def analyze_video_stream(req: AnalyzeRequest):
+    """SSE endpoint — streams progress stages during analysis."""
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        try:
+            if not req.url and not req.text:
+                yield _sse_event("error", 0, "Provide a video URL or transcript text")
+                return
+
+            transcript = None
+            platform = detect_platform(req.url) if req.url else None
+
+            if req.url and platform == "youtube":
+                yield _sse_event("fetching_subtitles", 10, "Fetching YouTube subtitles...")
+
+                global _yt_last_request
+                async with _yt_lock:
+                    now = time.time()
+                    wait = _YT_MIN_INTERVAL - (now - _yt_last_request)
+                    if wait > 0:
+                        await asyncio.sleep(wait)
+                    _yt_last_request = time.time()
+
+                try:
+                    transcript = await get_youtube_transcript(req.url)
+                    yield _sse_event("subtitles_ready", 30, "Subtitles loaded")
+                except (ValueError, Exception):
+                    yield _sse_event("error", 0, "NO_SUBTITLES: No subtitles available. Upload the audio/video file instead.")
+                    return
+
+            elif req.url and platform:
+                yield _sse_event("downloading_audio", 10, f"Downloading audio from {platform}...")
+
+                try:
+                    from ..services.audio_transcript import download_audio
+                    audio_path = await download_audio(req.url)
+                except Exception as e:
+                    logger.error("Download failed for {} ({}): {}", req.url, platform, e)
+                    yield _sse_event("error", 0, f"Failed to download {platform} video")
+                    return
+
+                yield _sse_event("transcribing", 40, "Transcribing audio with Whisper...")
+
+                try:
+                    audio_data = audio_path.read_bytes()
+                    size_mb = len(audio_data) / (1024 * 1024)
+                    if size_mb > 25:
+                        yield _sse_event("error", 0, "Audio too large (>25MB). Try a shorter video.")
+                        return
+                    from ..services.audio_transcript import transcribe_with_groq
+                    result = await transcribe_with_groq(audio_data, f"{platform}_audio.m4a")
+                    result["source"] = f"{platform}_groq_whisper"
+                    transcript = from_user_paste(result["text"], result.get("language", "unknown"))
+                    transcript.source = result["source"]
+                    yield _sse_event("transcription_ready", 60, f"Transcribed ({len(result['text'])} chars)")
+                except RuntimeError as e:
+                    msg = str(e)
+                    yield _sse_event("error", 0, f"Transcription failed: {msg}")
+                    return
+                finally:
+                    try:
+                        audio_path.unlink(missing_ok=True)
+                        audio_path.parent.rmdir()
+                    except OSError:
+                        pass
+
+            elif req.text:
+                transcript = from_user_paste(req.text)
+                yield _sse_event("text_ready", 30, "Text received")
+
+            elif req.url:
+                yield _sse_event("error", 0, "Unsupported URL")
+                return
+            else:
+                yield _sse_event("error", 0, "No input provided")
+                return
+
+            if not transcript:
+                yield _sse_event("error", 0, "Failed to obtain transcript")
+                return
+
+            yield _sse_event("analyzing", 70, "AI is analyzing the content...")
+
+            try:
+                result = await analyze_transcript(transcript, req.model)
+            except AnalysisError as e:
+                logger.error("Analysis failed: {}", e)
+                yield _sse_event("error", 0, "Analysis failed. Try a different model.")
+                return
+
+            yield _sse_event("done", 100, "Analysis complete", result)
+
+        except Exception as e:
+            logger.error("Stream error: {}", e)
+            yield _sse_event("error", 0, "Internal error")
+
+    return EventSourceResponse(event_generator())
 
 
 @router.post("/export/anki")
