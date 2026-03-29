@@ -1,31 +1,85 @@
-"""Audio transcription via Groq Whisper API + yt-dlp for audio download.
+"""Audio transcription: subtitles → Groq Whisper → browser Whisper fallback.
 
-Primary: Groq Whisper (fast, high quality, free 10h/month)
-Fallback: Browser Whisper.js (handled by frontend, no server dependency)
-
-Note: yt-dlp download_youtube_audio is available but NOT auto-triggered
-from /api/analyze — datacenter IPs get banned by YouTube.
-Used only via explicit /api/youtube-audio/{video_id} endpoint.
+Pipeline for non-YouTube platforms:
+1. fetch_subtitles() — yt-dlp metadata only, no download (~1-2s)
+2. transcribe_with_groq() — yt-dlp audio + Groq Whisper API (~30-90s)
+3. Browser Whisper.js — frontend fallback when Groq unavailable
 """
 
 from __future__ import annotations
 
 import asyncio
 import os
+import re
 import tempfile
 from pathlib import Path
 
 import httpx
+import yt_dlp
 from loguru import logger
 
 from ..core.config import settings
 
-
 _WHISPER_MODELS = ["whisper-large-v3-turbo", "whisper-large-v3"]
+
+# SRT/VTT noise: timestamps, sequence numbers, headers, HTML tags
+_SUB_TIMESTAMP_RE = re.compile(r"\d{2}:\d{2}[:\.,]\d{2,3}\s*-->.*")
+_SUB_HTML_TAG_RE = re.compile(r"<[^>]+>")
+_SUB_HEADERS = {"WEBVTT", "NOTE", "STYLE", "Kind:", "Language:"}
+
+
+def _parse_subtitle_text(raw: str) -> str:
+    """Parse SRT/VTT content into plain text."""
+    lines: list[str] = []
+    for line in raw.split("\n"):
+        line = line.strip()
+        if not line or line.isdigit():
+            continue
+        if _SUB_TIMESTAMP_RE.match(line):
+            continue
+        if any(line.startswith(h) for h in _SUB_HEADERS):
+            continue
+        line = _SUB_HTML_TAG_RE.sub("", line)
+        if line:
+            lines.append(line)
+    return " ".join(lines)
+
+
+async def fetch_subtitles(url: str) -> dict | None:
+    """Extract subtitles via yt-dlp metadata (no audio download).
+
+    Returns {text, source, language} or None if unavailable.
+    """
+    def _fetch() -> dict | None:
+        with yt_dlp.YoutubeDL({"quiet": True, "skip_download": True, "writesubtitles": True}) as ydl:
+            info = ydl.extract_info(url, download=False)
+
+        subs = info.get("subtitles") or {}
+        if not subs:
+            return None
+
+        for lang, formats in subs.items():
+            sub_url = next((f["url"] for f in formats if f["ext"] in ("srt", "vtt")), None)
+            if not sub_url:
+                continue
+
+            resp = httpx.get(sub_url, timeout=10)
+            if resp.status_code != 200 or len(resp.text) < 50:
+                continue
+
+            text = _parse_subtitle_text(resp.text)
+            if len(text) < 20:
+                continue
+
+            return {"text": text, "source": f"subtitles_{lang}", "language": lang}
+
+        return None
+
+    return await asyncio.to_thread(_fetch)
 
 
 async def transcribe_with_groq(audio_data: bytes, filename: str = "audio.mp3") -> dict:
-    """Transcribe via Groq Whisper API. Tries turbo first, falls back to v3."""
+    """Transcribe via Groq Whisper API. Cascades: turbo → v3 on 403/429/503."""
     fd, tmp_path = tempfile.mkstemp(suffix=Path(filename).suffix or ".mp3")
     tmp = Path(tmp_path)
     try:
@@ -65,13 +119,8 @@ async def transcribe_with_groq(audio_data: bytes, filename: str = "audio.mp3") -
 
 
 async def download_audio(url: str) -> Path:
-    """Download audio from any yt-dlp supported URL (YouTube, VK, Rutube, etc.).
-
-    Uses ffmpeg postprocessor to extract audio-only (~2-5 MB instead of 100+ MB video).
-    """
-    def _download():
-        import yt_dlp
-
+    """Download audio via yt-dlp + ffmpeg extraction (mp3 64kbps)."""
+    def _download() -> Path:
         tmp_dir = tempfile.mkdtemp(prefix="podmemory_")
         output_path = str(Path(tmp_dir) / "audio.%(ext)s")
 
@@ -87,7 +136,6 @@ async def download_audio(url: str) -> Path:
                 "preferredcodec": "mp3",
                 "preferredquality": "64",
             }],
-            # Limit to first 15 min of audio
             "download_ranges": yt_dlp.utils.download_range_func(None, [(0, 900)]),
             "force_keyframes_at_cuts": True,
         }
@@ -97,13 +145,10 @@ async def download_audio(url: str) -> Path:
             for f in Path(tmp_dir).iterdir():
                 if f.is_file() and f.suffix in (".mp3", ".m4a", ".ogg", ".opus", ".wav"):
                     return f
-            filename = ydl.prepare_filename(info)
-            result = Path(filename)
-            if result.exists():
-                return result
-            mp3 = result.with_suffix(".mp3")
-            if mp3.exists():
-                return mp3
+            prepared = Path(ydl.prepare_filename(info))
+            for candidate in (prepared, prepared.with_suffix(".mp3")):
+                if candidate.exists():
+                    return candidate
             raise RuntimeError("Download completed but audio file not found")
 
     return await asyncio.to_thread(_download)
@@ -115,11 +160,19 @@ async def download_youtube_audio(video_id: str) -> Path:
 
 
 async def transcribe_url(url: str, platform: str = "unknown") -> dict:
-    """Full server-side pipeline: yt-dlp download → Groq Whisper.
+    """Subtitles (fast) → yt-dlp + Groq Whisper (fallback).
 
     Returns {text, source, language} or raises RuntimeError.
     """
-    logger.info("Downloading audio from {}: {}", platform, url)
+    try:
+        subs = await fetch_subtitles(url)
+        if subs:
+            logger.info("Got subtitles for {} ({} chars)", platform, len(subs["text"]))
+            return subs
+    except Exception as e:
+        logger.debug("Subtitle fetch failed for {}: {}", url, e)
+
+    logger.info("No subtitles, downloading audio from {}: {}", platform, url)
     audio_path = await download_audio(url)
 
     try:
