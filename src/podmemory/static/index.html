@@ -452,6 +452,58 @@ header {
 
 .fc-preview.revealed .fc-a { display: block; }
 
+/* Vocabulary */
+.vocab-grid { display: flex; flex-direction: column; gap: 6px; }
+
+.vocab-item {
+  display: flex;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface2);
+  border-left: 3px solid var(--accent2);
+}
+
+.vocab-term {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: var(--accent2);
+  min-width: 100px;
+  flex-shrink: 0;
+}
+
+.vocab-def {
+  font-size: 0.82rem;
+  color: var(--text2);
+  line-height: 1.4;
+}
+
+/* Quotes */
+.quotes-list { display: flex; flex-direction: column; gap: 10px; }
+
+.quote-item {
+  padding: 14px 18px;
+  background: var(--surface2);
+  border-left: 4px solid var(--accent);
+  font-style: italic;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--text);
+  position: relative;
+}
+
+.quote-item::before {
+  content: '\201C';
+  font-family: var(--font-display);
+  font-size: 2.5rem;
+  color: var(--accent);
+  opacity: 0.3;
+  position: absolute;
+  top: -4px;
+  left: 6px;
+  line-height: 1;
+}
+
 /* Timestamps */
 .ts-list { list-style: none; }
 
@@ -909,18 +961,18 @@ nav {
   <!-- ════ ANALYZE ════ -->
   <section id="screenAnalyze" class="screen active">
     <span class="hero-tag" data-i18n="heroTag">AI-Powered Knowledge Extraction</span>
-    <h1 class="hero-title" data-i18n="heroTitle">Remember<br><mark>everything</mark><br>you watch</h1>
-    <p class="hero-sub" data-i18n="heroSub">YouTube link or any audio/video file. AI extracts insights, generates flashcards, and helps you remember with spaced repetition.</p>
+    <h1 class="hero-title" data-i18n="heroTitle">Remember<br><mark>everything</mark><br>you learn</h1>
+    <p class="hero-sub" data-i18n="heroSub">Video, article, or book. Paste a link or drop a file — AI extracts insights, flashcards, vocabulary, and helps you remember with spaced repetition.</p>
 
-    <label class="field-label" data-i18n="urlLabel">Video URL</label>
-    <input type="text" class="url-input" id="urlInput" data-i18n-placeholder="urlPlaceholder" placeholder="YouTube, VK, Rutube, TikTok, Twitch, Vimeo..." autocomplete="off" spellcheck="false">
+    <label class="field-label" data-i18n="urlLabel">URL</label>
+    <input type="text" class="url-input" id="urlInput" data-i18n-placeholder="urlPlaceholder" placeholder="YouTube, article, Habr, VK, Rutube, Wikipedia..." autocomplete="off" spellcheck="false">
 
-    <div class="or-divider" data-i18n="orFile">or drop any audio / video file</div>
+    <div class="or-divider" data-i18n="orFile">or drop any file</div>
 
-    <input type="file" id="fileInput" accept="audio/*,video/*,.mp3,.mp4,.m4a,.webm,.ogg,.wav,.mov" style="display:none">
+    <input type="file" id="fileInput" accept="audio/*,video/*,.pdf,.epub,.mp3,.mp4,.m4a,.webm,.ogg,.wav,.mov" style="display:none">
     <label for="fileInput" id="dropZone" style="display:block;border:2.5px dashed var(--border-light);padding:28px 20px;text-align:center;cursor:pointer;transition:all 0.15s">
       <p style="font-size:0.92rem;color:var(--text2)" data-i18n="dropText">Drop file here or <span style="color:var(--accent);font-weight:700;text-decoration:underline">browse</span></p>
-      <p style="font-family:var(--font-mono);font-size:0.65rem;color:var(--text3);margin-top:6px" data-i18n="dropFormats">MP3, MP4, WAV, WebM, M4A, OGG — auto-transcribed in your browser</p>
+      <p style="font-family:var(--font-mono);font-size:0.65rem;color:var(--text3);margin-top:6px" data-i18n="dropFormats">PDF, MP3, MP4, WAV, WebM — articles, books, audio, video</p>
     </label>
     <div id="fileStatus" style="display:none;margin-top:8px;padding:10px 14px;background:var(--surface2);border:1.5px solid var(--border-light)">
       <p id="fileStatusText" style="font-family:var(--font-mono);font-size:0.78rem;color:var(--text)"></p>
@@ -1035,14 +1087,14 @@ const LANG_LABELS = { en: 'EN', ru: 'RU', zh: 'CN' };
 const I18N = {
   en: {
     heroTag: 'AI-Powered Knowledge Extraction',
-    heroTitle: 'Remember<br><mark>everything</mark><br>you watch',
-    heroSub: 'YouTube, VK, Rutube, TikTok, Twitch, Vimeo, and 10+ more platforms. AI extracts insights, generates flashcards, and helps you remember with spaced repetition.',
-    urlLabel: 'Video URL',
-    urlPlaceholder: 'YouTube, VK, Rutube, TikTok, Twitch, Vimeo...',
-    orFile: 'or drop any audio / video file',
+    heroTitle: 'Remember<br><mark>everything</mark><br>you learn',
+    heroSub: 'Video, article, or book. Paste a link or drop a file — AI extracts insights, flashcards, vocabulary, and helps you remember with spaced repetition.',
+    urlLabel: 'URL',
+    urlPlaceholder: 'YouTube, article, Habr, VK, Rutube, Wikipedia...',
+    orFile: 'or drop any file',
     dropText: 'Drop file here or <span style="color:var(--accent);font-weight:700;text-decoration:underline">browse</span>',
-    dropFormats: 'MP3, MP4, WAV, WebM, M4A, OGG — auto-transcribed in your browser',
-    orPaste: 'or paste transcript',
+    dropFormats: 'PDF, MP3, MP4, WAV, WebM — articles, books, audio, video',
+    orPaste: 'or paste text',
     modelLabel: 'Model',
     analyzeBtn: 'Analyze \u2192',
     analyzing: 'Extracting knowledge...',
@@ -1074,7 +1126,7 @@ const I18N = {
     heroTitle: '\u0417\u0430\u043f\u043e\u043c\u043d\u0438<br><mark>\u0432\u0441\u0451</mark><br>\u0447\u0442\u043e \u0441\u043c\u043e\u0442\u0440\u0438\u0448\u044c',
     heroSub: '\u0421\u0441\u044b\u043b\u043a\u0430 \u043d\u0430 YouTube \u0438\u043b\u0438 \u043b\u044e\u0431\u043e\u0439 \u0430\u0443\u0434\u0438\u043e/\u0432\u0438\u0434\u0435\u043e \u0444\u0430\u0439\u043b. AI \u0438\u0437\u0432\u043b\u0435\u043a\u0430\u0435\u0442 \u043a\u043b\u044e\u0447\u0435\u0432\u044b\u0435 \u0438\u0434\u0435\u0438, \u0441\u043e\u0437\u0434\u0430\u0451\u0442 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0438 \u0438 \u043f\u043e\u043c\u043e\u0433\u0430\u0435\u0442 \u0437\u0430\u043f\u043e\u043c\u043d\u0438\u0442\u044c \u0441 \u043f\u043e\u043c\u043e\u0449\u044c\u044e \u0438\u043d\u0442\u0435\u0440\u0432\u0430\u043b\u044c\u043d\u043e\u0433\u043e \u043f\u043e\u0432\u0442\u043e\u0440\u0435\u043d\u0438\u044f.',
     urlLabel: '\u0421\u0441\u044b\u043b\u043a\u0430 YouTube',
-    urlPlaceholder: 'YouTube, VK, Rutube, TikTok, Twitch, Vimeo...',
+    urlPlaceholder: 'YouTube, статья, Habr, VK, Rutube, Wikipedia...',
     orFile: '\u0438\u043b\u0438 \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u0435 \u0430\u0443\u0434\u0438\u043e / \u0432\u0438\u0434\u0435\u043e \u0444\u0430\u0439\u043b',
     dropText: '\u041f\u0435\u0440\u0435\u0442\u0430\u0449\u0438\u0442\u0435 \u0444\u0430\u0439\u043b \u0438\u043b\u0438 <span style="color:var(--accent);font-weight:700;text-decoration:underline">\u0432\u044b\u0431\u0435\u0440\u0438\u0442\u0435</span>',
     dropFormats: 'MP3, MP4, WAV, WebM, M4A, OGG \u2014 \u0442\u0440\u0430\u043d\u0441\u043a\u0440\u0438\u0431\u0430\u0446\u0438\u044f \u043f\u0440\u044f\u043c\u043e \u0432 \u0431\u0440\u0430\u0443\u0437\u0435\u0440\u0435',
@@ -1110,7 +1162,7 @@ const I18N = {
     heroTitle: '\u8bb0\u4f4f\u4f60<br><mark>\u770b\u8fc7\u7684</mark><br>\u4e00\u5207',
     heroSub: 'YouTube\u94fe\u63a5\u6216\u4efb\u4f55\u97f3\u9891/\u89c6\u9891\u6587\u4ef6\u3002AI\u63d0\u53d6\u5173\u952e\u89c1\u89e3\uff0c\u751f\u6210\u95ea\u5361\uff0c\u5e76\u901a\u8fc7\u95f4\u9694\u91cd\u590d\u5e2e\u52a9\u8bb0\u5fc6\u3002',
     urlLabel: 'YouTube \u94fe\u63a5',
-    urlPlaceholder: 'YouTube, VK, Rutube, TikTok, Twitch, Vimeo...',
+    urlPlaceholder: 'YouTube, статья, Habr, VK, Rutube, Wikipedia...',
     orFile: '\u6216\u62d6\u653e\u97f3\u9891/\u89c6\u9891\u6587\u4ef6',
     dropText: '\u62d6\u653e\u6587\u4ef6\u6216 <span style="color:var(--accent);font-weight:700;text-decoration:underline">\u6d4f\u89c8</span>',
     dropFormats: 'MP3, MP4, WAV, WebM, M4A, OGG \u2014 \u5728\u6d4f\u89c8\u5668\u4e2d\u81ea\u52a8\u8f6c\u5f55',
@@ -1328,6 +1380,96 @@ async function transcribeFile() {
 }
 
 // ─── Transcript Review ───
+function showChapterPicker(chapters) {
+  const container = document.getElementById('fileStatus');
+  let html = '<div style="margin-top:10px;max-height:300px;overflow-y:auto">';
+  chapters.forEach((ch, i) => {
+    const words = ch.word_count || ch.text?.split(' ').length || 0;
+    html += `<label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border-light);cursor:pointer;font-size:0.82rem">
+      <input type="checkbox" class="chapter-cb" data-idx="${i}" checked>
+      <span style="flex:1"><b>${esc(ch.title)}</b></span>
+      <span style="font-family:var(--font-mono);font-size:0.7rem;color:var(--text3)">${words}w</span>
+    </label>`;
+  });
+  html += '</div>';
+  html += `<button class="action-btn primary" style="margin-top:10px;width:100%" onclick="analyzeSelectedChapters()">Analyze selected chapters →</button>`;
+  container.innerHTML += html;
+  container.style.display = '';
+}
+
+async function analyzeFullBook() {
+  const chapters = window._bookChapters;
+  if (!chapters) return;
+  const allText = chapters.map(c => c.text).join('\n\n');
+  document.getElementById('transcriptInput').value = allText;
+  uploadedFile = null;
+  window._bookChapters = null;
+  document.getElementById('fileStatus').style.display = 'none';
+  document.getElementById('analyzeBtn').click();
+}
+
+async function analyzeSelectedChapters() {
+  const cbs = document.querySelectorAll('.chapter-cb:checked');
+  if (!cbs.length) return toast('Select at least one chapter', 'error');
+  const chapters = window._bookChapters;
+  const model = document.getElementById('modelSelect').value;
+  const btn = document.querySelector('#fileStatus .action-btn');
+  if (btn) { btn.textContent = 'Analyzing...'; btn.disabled = true; }
+
+  const statusEl = document.getElementById('fileStatus');
+  const results = [];
+
+  for (const cb of cbs) {
+    const idx = parseInt(cb.dataset.idx);
+    const ch = chapters[idx];
+    const label = cb.closest('label');
+    if (label) label.style.background = 'var(--highlight)';
+
+    try {
+      const resp = await fetch('/api/analyze-chapter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: ch.text, model, source_type: 'book' }),
+      });
+      if (!resp.ok) { const err = await resp.json().catch(() => ({})); throw new Error(err.detail || 'Failed'); }
+      const data = await resp.json();
+      data.title = ch.title + ' — ' + (data.title || '');
+      results.push(data);
+      if (label) label.style.background = 'rgba(22,163,74,0.1)';
+    } catch (e) {
+      toast(`Chapter "${ch.title}": ${e.message}`, 'error');
+      if (label) label.style.background = 'rgba(255,92,53,0.1)';
+    }
+  }
+
+  if (!results.length) return toast('All chapters failed', 'error');
+
+  // Merge results into one analysis
+  const merged = {
+    title: (window._bookTitle || 'Book') + (window._bookAuthor ? ' — ' + window._bookAuthor : ''),
+    tldr: results.map(r => r.tldr).join(' '),
+    key_insights: results.flatMap(r => r.key_insights || []),
+    flashcards: results.flatMap(r => r.flashcards || []),
+    timestamps: [],
+    vocabulary: results.flatMap(r => r.vocabulary || []),
+    quotes: results.flatMap(r => r.quotes || []),
+    action_items: results.flatMap(r => r.action_items || []),
+    tags: [...new Set(results.flatMap(r => r.tags || []))],
+    difficulty: results[0]?.difficulty || 'intermediate',
+    source_type: 'book',
+    model_used: results[0]?.model_used || '',
+    transcript_source: 'book_chapters',
+    transcript_language: results[0]?.transcript_language || 'unknown',
+    transcript_length: results.reduce((s, r) => s + (r.transcript_length || 0), 0),
+  };
+
+  currentAnalysis = merged;
+  currentAnalysis.analyzed_at = new Date().toISOString();
+  renderResults(merged);
+  toast(`Analyzed ${results.length} chapters: ${merged.flashcards.length} flashcards`, 'success');
+  window._bookChapters = null;
+}
+
 function showTranscriptReview(text) {
   return new Promise((resolve, reject) => {
     const block = document.getElementById('reviewBlock');
@@ -1355,15 +1497,41 @@ async function analyze() {
   let text = document.getElementById('transcriptInput').value.trim();
   const model = document.getElementById('modelSelect').value;
 
-  // If file uploaded, transcribe first
+  // If file uploaded — PDF or audio/video
   if (uploadedFile && !url && !text) {
     const btn = document.getElementById('analyzeBtn');
     btn.classList.add('loading');
     btn.disabled = true;
     try {
-      text = await transcribeFile();
-      if (!text) { btn.classList.remove('loading'); btn.disabled = false; return toast('Transcription failed', 'error'); }
-    } catch (e) { btn.classList.remove('loading'); btn.disabled = false; return toast('Transcription error: ' + e.message, 'error'); }
+      const fname = uploadedFile.name.toLowerCase();
+      if (fname.endsWith('.pdf') || fname.endsWith('.epub')) {
+        // PDF/EPUB → extract text via server
+        const endpoint = fname.endsWith('.epub') ? '/api/extract-epub' : '/api/extract-pdf';
+        const form = new FormData();
+        form.append('file', uploadedFile);
+        const extractResp = await fetch(endpoint, { method: 'POST', body: form });
+        if (!extractResp.ok) { const err = await extractResp.json().catch(() => ({})); throw new Error(err.detail || 'Extraction failed'); }
+        const extractData = await extractResp.json();
+
+        if (extractData.chapters?.length > 1) {
+          // Book with chapters — let user choose
+          window._bookChapters = extractData.chapters;
+          window._bookTitle = extractData.title || uploadedFile.name;
+          window._bookAuthor = extractData.author || '';
+          fileStatusText.innerHTML = `<b>${esc(extractData.title || uploadedFile.name)}</b>${extractData.author ? ' by ' + esc(extractData.author) : ''} — ${extractData.word_count} words, ${extractData.chapters.length} chapters. <a href="#" onclick="event.preventDefault();analyzeFullBook()">Analyze full book</a> or pick chapters below.`;
+          showChapterPicker(extractData.chapters);
+          btn.classList.remove('loading'); btn.disabled = false;
+          return;
+        }
+
+        text = extractData.text;
+        fileStatusText.textContent = uploadedFile.name + ' — ' + extractData.word_count + ' words extracted';
+      } else {
+        // Audio/video → transcribe
+        text = await transcribeFile();
+      }
+      if (!text) { btn.classList.remove('loading'); btn.disabled = false; return toast('Extraction failed', 'error'); }
+    } catch (e) { btn.classList.remove('loading'); btn.disabled = false; return toast(e.message, 'error'); }
     btn.classList.remove('loading');
     btn.disabled = false;
   }
@@ -1386,11 +1554,14 @@ async function analyze() {
   statusTxt.textContent = '';
   wsTxt.textContent = 'Starting...';
 
+  // Detect source type for PDF files
+  const source_type = (uploadedFile && uploadedFile.name.toLowerCase().endsWith('.pdf')) ? 'pdf' : '';
+
   try {
     const resp = await fetch('/api/analyze-stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, text, model }),
+      body: JSON.stringify({ url, text, model, source_type }),
     });
 
     const reader = resp.body.getReader();
@@ -1523,6 +1694,16 @@ function renderResults(d) {
     h += `<div class="result-card"><div class="card-label">Timestamps</div><ul class="ts-list">
     ${d.timestamps.map(ts=>`<li class="ts-item"><span class="ts-time" ${vid?`onclick="window.open('https://youtube.com/watch?v=${vid}&t=${tsToSec(ts.time)}','_blank')"`:''}>
     ${esc(ts.time)}</span><span>${esc(ts.label)}</span></li>`).join('')}</ul></div>`;
+  }
+
+  if (d.vocabulary?.length) {
+    h += `<div class="result-card"><div class="card-label">Vocabulary · ${d.vocabulary.length}</div><div class="vocab-grid">
+    ${d.vocabulary.map(v=>`<div class="vocab-item"><span class="vocab-term">${esc(v.term)}</span><span class="vocab-def">${esc(v.definition)}</span></div>`).join('')}</div></div>`;
+  }
+
+  if (d.quotes?.length) {
+    h += `<div class="result-card"><div class="card-label">Quotes</div><div class="quotes-list">
+    ${d.quotes.map(q=>`<div class="quote-item">${esc(q)}</div>`).join('')}</div></div>`;
   }
 
   if (d.action_items?.length) {

@@ -5,6 +5,7 @@ class AnalyzeRequest(BaseModel):
     url: str = ""
     text: str = ""
     model: str = ""
+    source_type: str = ""  # "video", "article", "pdf" — auto-detected if empty
 
 
 class Flashcard(BaseModel):
@@ -15,6 +16,11 @@ class Flashcard(BaseModel):
 class Timestamp(BaseModel):
     time: str
     label: str
+
+
+class VocabTerm(BaseModel):
+    term: str
+    definition: str
 
 
 class AnkiExportRequest(BaseModel):
@@ -31,6 +37,9 @@ class AnalysisResponse(BaseModel):
     action_items: list[str] = []
     tags: list[str] = []
     difficulty: str = "intermediate"
+    source_type: str = ""  # "video", "article", "pdf", "text"
+    vocabulary: list[VocabTerm] = []  # key terms + definitions (for articles/books)
+    quotes: list[str] = []  # notable quotes worth remembering
     model_used: str = ""
     transcript_source: str = ""
     transcript_language: str = ""

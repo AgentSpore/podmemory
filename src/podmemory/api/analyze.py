@@ -23,6 +23,7 @@ from ..services.transcript import (
     from_user_paste,
 )
 from ..services.audio_transcript import download_audio, fetch_subtitles, transcribe_with_groq, download_youtube_audio, transcribe_url
+from ..services.text_extract import extract_from_url, extract_from_pdf, extract_from_epub
 
 router = APIRouter(prefix="/api", tags=["analysis"])
 
@@ -107,6 +108,80 @@ async def get_youtube_audio(video_id: str):
         raise HTTPException(502, "Failed to download audio")
 
 
+@router.post("/extract-pdf")
+async def extract_pdf(file: UploadFile = File(...)):
+    """Extract text from PDF. Returns {text, title, word_count, chapters}."""
+    if file.size and file.size > 50 * 1024 * 1024:
+        raise HTTPException(400, "File too large (max 50MB)")
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "Empty file")
+    if len(data) > 50 * 1024 * 1024:
+        raise HTTPException(400, "File too large (max 50MB)")
+    try:
+        extracted = await extract_from_pdf(data, file.filename or "document.pdf")
+        return {
+            "text": extracted.text,
+            "title": extracted.title,
+            "word_count": extracted.word_count,
+            "chapters": len(extracted.chapters),
+            "source_type": "pdf",
+        }
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.error("PDF extraction failed: {}", e)
+        raise HTTPException(502, "Failed to extract PDF text")
+
+
+@router.post("/extract-epub")
+async def extract_epub_file(file: UploadFile = File(...)):
+    """Extract text from EPUB with chapter structure.
+
+    Returns {text, title, author, word_count, chapters: [{title, text, word_count}]}.
+    """
+    if file.size and file.size > 100 * 1024 * 1024:
+        raise HTTPException(400, "File too large (max 100MB)")
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "Empty file")
+    if len(data) > 100 * 1024 * 1024:
+        raise HTTPException(400, "File too large (max 100MB)")
+    try:
+        extracted = await extract_from_epub(data, file.filename or "book.epub")
+        return {
+            "text": extracted.text,
+            "title": extracted.title,
+            "author": extracted.author,
+            "word_count": extracted.word_count,
+            "source_type": "book",
+            "chapters": [
+                {"title": ch["title"], "text": ch["text"], "word_count": len(ch["text"].split())}
+                for ch in extracted.chapters
+            ],
+        }
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.error("EPUB extraction failed: {}", e)
+        raise HTTPException(502, "Failed to extract EPUB text")
+
+
+@router.post("/analyze-chapter", response_model=AnalysisResponse)
+async def analyze_chapter(req: AnalyzeRequest):
+    """Analyze a single book chapter. Send text + source_type='book'."""
+    if not req.text:
+        raise HTTPException(400, "Provide chapter text")
+    transcript = from_user_paste(req.text)
+    transcript.source = "book_chapter"
+    try:
+        result = await analyze_transcript(transcript, req.model, source_type=req.source_type or "book")
+    except AnalysisError as e:
+        logger.error("Chapter analysis failed: {}", e)
+        raise HTTPException(502, "Analysis failed. Try a different model.")
+    return AnalysisResponse(**result)
+
+
 @router.post("/transcribe")
 async def transcribe_audio(file: UploadFile = File(...)):
     """Transcribe uploaded audio/video via Groq Whisper. Returns {text, source}."""
@@ -136,6 +211,7 @@ async def analyze_video(req: AnalyzeRequest):
         raise HTTPException(400, "Provide a video URL or transcript text")
 
     transcript = None
+    source_type = req.source_type or ""
     platform = detect_platform(req.url) if req.url else None
 
     if req.url and platform == "youtube":
@@ -169,14 +245,21 @@ async def analyze_video(req: AnalyzeRequest):
             logger.error("Transcription failed for {} ({}): {}", req.url, platform, e)
             raise HTTPException(502, f"Failed to transcribe {platform} video")
 
+    elif req.url and not platform:
+        # Not a video platform — try as article URL
+        try:
+            extracted = await extract_from_url(req.url)
+            transcript = from_user_paste(extracted.text, extracted.language)
+            transcript.source = f"article:{req.url}"
+            source_type = "article"
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        except Exception as e:
+            logger.error("Article extraction failed for {}: {}", req.url, e)
+            raise HTTPException(502, "Failed to extract article text")
+
     elif req.text:
         transcript = from_user_paste(req.text)
-    elif req.url:
-        raise HTTPException(
-            400,
-            "Unsupported URL. Supported: YouTube, VK, Rutube, TikTok, Twitch, Vimeo, and more. "
-            "For other videos, upload the audio/video file."
-        )
     else:
         raise HTTPException(400, "No input provided")
 
@@ -184,7 +267,7 @@ async def analyze_video(req: AnalyzeRequest):
         raise HTTPException(502, "Failed to obtain transcript")
 
     try:
-        result = await analyze_transcript(transcript, req.model)
+        result = await analyze_transcript(transcript, req.model, source_type=source_type)
     except AnalysisError as e:
         logger.error("Analysis failed: {}", e)
         raise HTTPException(502, "Analysis failed. Try a different model.")
@@ -210,6 +293,7 @@ async def analyze_video_stream(req: AnalyzeRequest):
                 return
 
             transcript = None
+            source_type = req.source_type or ""
             platform = detect_platform(req.url) if req.url else None
 
             if req.url and platform == "youtube":
@@ -279,13 +363,28 @@ async def analyze_video_stream(req: AnalyzeRequest):
                         except OSError:
                             pass
 
+            elif req.url and not platform:
+                # Article URL — extract text via trafilatura
+                yield _sse_event("extracting_article", 10, "Extracting article text...")
+                source_type = "article"
+                try:
+                    extracted = await extract_from_url(req.url)
+                    transcript = from_user_paste(extracted.text, extracted.language)
+                    transcript.source = f"article:{req.url}"
+                    yield _sse_event("article_ready", 30, f"Extracted ({extracted.word_count} words)")
+                except ValueError as e:
+                    yield _sse_event("error", 0, str(e))
+                    return
+                except Exception as e:
+                    logger.error("Article extraction failed: {}", e)
+                    yield _sse_event("error", 0, "Failed to extract article text")
+                    return
+
             elif req.text:
                 transcript = from_user_paste(req.text)
+                source_type = req.source_type or "text"
                 yield _sse_event("text_ready", 30, "Text received")
 
-            elif req.url:
-                yield _sse_event("error", 0, "Unsupported URL")
-                return
             else:
                 yield _sse_event("error", 0, "No input provided")
                 return
@@ -297,7 +396,7 @@ async def analyze_video_stream(req: AnalyzeRequest):
             yield _sse_event("analyzing", 70, "AI is analyzing the content...")
 
             try:
-                result = await analyze_transcript(transcript, req.model)
+                result = await analyze_transcript(transcript, req.model, source_type=source_type)
             except AnalysisError as e:
                 logger.error("Analysis failed: {}", e)
                 yield _sse_event("error", 0, "Analysis failed. Try a different model.")

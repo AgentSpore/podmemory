@@ -1,4 +1,4 @@
-"""LLM-based video analysis: transcript → structured knowledge extraction."""
+"""LLM-based content analysis: video/article/book → structured knowledge extraction."""
 
 from __future__ import annotations
 
@@ -14,58 +14,70 @@ from loguru import logger
 from ..core.config import settings
 from .transcript import Transcript
 
-
-SYSTEM_PROMPT = """You are PodMemory — an expert knowledge extraction AI.
+_VIDEO_PROMPT = """You are PodMemory — an expert knowledge extraction AI.
 Your job: take a video transcript and extract maximum learning value from it.
 
 Rules:
-- LANGUAGE: Detect the language of the transcript. Write ALL output in that SAME language.
+- LANGUAGE: Detect the language of the content. Write ALL output in that SAME language.
 - Be precise, analytical, and thorough
 - Flashcards should test understanding, not just recall
-- Timestamps MUST be within the actual video duration (provided below). Do NOT invent timestamps beyond the video length. If video is short (under 60s), use fewer timestamps or omit them.
+- Timestamps MUST be within the actual video duration (provided below). Do NOT invent timestamps beyond the video length.
 - Action items should be concrete and actionable
-- Scale output to content length: short transcripts get fewer insights/cards, long ones get more
+- Scale output to content length: short content gets fewer insights/cards, long ones get more
 
 Return ONLY valid JSON (no markdown fences):
 {
-  "title": "Brief descriptive title for this content",
+  "title": "Brief descriptive title",
   "tldr": "2-3 sentence summary of the core message",
-  "key_insights": [
-    "Insight 1 — the most important takeaway",
-    "Insight 2",
-    "..."
-  ],
-  "flashcards": [
-    {"q": "Question testing understanding", "a": "Clear, concise answer"},
-    {"q": "...", "a": "..."}
-  ],
-  "timestamps": [
-    {"time": "0:00", "label": "Introduction"},
-    {"time": "2:30", "label": "Key concept explained"},
-    {"time": "..."}
-  ],
-  "action_items": [
-    "Concrete thing you can do right now based on this content",
-    "..."
-  ],
-  "tags": ["topic1", "topic2", "topic3"],
+  "key_insights": ["Insight 1", "Insight 2", "..."],
+  "flashcards": [{"q": "Question testing understanding", "a": "Clear answer"}, ...],
+  "timestamps": [{"time": "0:00", "label": "Introduction"}, {"time": "2:30", "label": "Key concept"}, ...],
+  "action_items": ["Concrete actionable step", "..."],
+  "tags": ["topic1", "topic2"],
   "difficulty": "beginner|intermediate|advanced"
 }
 
 Generate 10-20 flashcards, 5-10 key insights, relevant timestamps, and 3-5 action items.
 Quality over quantity — each flashcard should test real understanding."""
 
-# Fallback models when primary fails (free tier on OpenRouter)
+_TEXT_PROMPT = """You are PodMemory — an expert knowledge extraction AI.
+Your job: take an article or book text and extract maximum learning value from it.
+
+Rules:
+- LANGUAGE: Detect the language of the content. Write ALL output in that SAME language.
+- Be precise, analytical, and thorough
+- Flashcards should test understanding, not just recall
+- Do NOT generate timestamps — this is text content, not video
+- Extract key vocabulary terms with clear definitions
+- Pick the most memorable and insightful quotes from the text
+- Action items should be concrete and actionable
+- Scale output to content length: short articles get fewer insights/cards, books get more
+
+Return ONLY valid JSON (no markdown fences):
+{
+  "title": "Brief descriptive title",
+  "tldr": "2-3 sentence summary of the core message",
+  "key_insights": ["Insight 1", "Insight 2", "..."],
+  "flashcards": [{"q": "Question testing understanding", "a": "Clear answer"}, ...],
+  "vocabulary": [{"term": "Key concept", "definition": "Clear explanation"}, ...],
+  "quotes": ["Most memorable quote from the text", "..."],
+  "action_items": ["Concrete actionable step", "..."],
+  "tags": ["topic1", "topic2"],
+  "difficulty": "beginner|intermediate|advanced"
+}
+
+Generate 10-20 flashcards, 5-10 key insights, 5-10 vocabulary terms, 3-5 quotes, and 3-5 action items.
+Quality over quantity — each flashcard should test real understanding."""
+
 FALLBACK_MODELS = [
     "google/gemini-2.0-flash-001",
     "meta-llama/llama-3.3-8b-instruct:free",
     "mistralai/mistral-small-3.1-24b-instruct:free",
 ]
 
-# In-memory LRU cache: key → (result, timestamp)
 _analysis_cache: OrderedDict[str, tuple[dict, float]] = OrderedDict()
 _CACHE_MAX = 50
-_CACHE_TTL = 3600  # 1 hour
+_CACHE_TTL = 3600
 
 
 class AnalysisError(Exception):
@@ -73,7 +85,6 @@ class AnalysisError(Exception):
 
 
 def _cache_key(text: str, model: str) -> str:
-    """Hash of transcript text + model for cache lookup."""
     h = hashlib.md5(f"{model}:{text[:5000]}".encode()).hexdigest()
     return h
 
@@ -95,15 +106,13 @@ def _cache_put(key: str, result: dict):
 
 
 def smart_truncate(text: str, max_chars: int = 14000) -> str:
-    """Truncate long transcripts preserving beginning + end at sentence boundaries."""
+    """Truncate long content preserving beginning + end at sentence boundaries."""
     if len(text) <= max_chars:
         return text
 
-    # Keep 70% from beginning, 30% from end
     head_budget = int(max_chars * 0.7)
-    tail_budget = max_chars - head_budget - 100  # 100 chars for separator
+    tail_budget = max_chars - head_budget - 100
 
-    # Cut at sentence boundary (., !, ?, newline)
     head = text[:head_budget]
     last_sentence = max(
         head.rfind(". "), head.rfind("! "), head.rfind("? "), head.rfind("\n")
@@ -125,7 +134,6 @@ def smart_truncate(text: str, max_chars: int = 14000) -> str:
 
 
 async def _call_llm(model: str, messages: list[dict]) -> str:
-    """Call OpenRouter LLM API. Returns raw content string."""
     async with httpx.AsyncClient(timeout=90) as client:
         resp = await client.post(
             "https://openrouter.ai/api/v1/chat/completions",
@@ -148,8 +156,7 @@ async def _call_llm(model: str, messages: list[dict]) -> str:
         return resp.json()["choices"][0]["message"]["content"]
 
 
-def _parse_llm_response(content: str, model: str, transcript: Transcript) -> dict:
-    """Parse and validate LLM JSON response."""
+def _parse_llm_response(content: str, model: str, transcript: Transcript, source_type: str) -> dict:
     content = re.sub(r"```json?\s*", "", content)
     content = re.sub(r"```", "", content)
     content = content.strip()
@@ -163,6 +170,14 @@ def _parse_llm_response(content: str, model: str, transcript: Transcript) -> dic
     if not result["flashcards"]:
         raise AnalysisError("LLM returned empty flashcards")
 
+    result.setdefault("timestamps", [])
+    result.setdefault("vocabulary", [])
+    result.setdefault("quotes", [])
+    result.setdefault("action_items", [])
+    result.setdefault("tags", [])
+    result.setdefault("difficulty", "intermediate")
+
+    result["source_type"] = source_type
     result["model_used"] = model
     result["transcript_source"] = transcript.source
     result["transcript_language"] = transcript.language
@@ -171,25 +186,8 @@ def _parse_llm_response(content: str, model: str, transcript: Transcript) -> dic
     return result
 
 
-async def analyze_transcript(transcript: Transcript, model: str = "") -> dict:
-    used_model = model or settings.llm_model
-
-    if not settings.openrouter_api_key:
-        raise AnalysisError(
-            "No API key configured. Set PM_OPENROUTER_API_KEY or OPENROUTER_API_KEY."
-        )
-
-    # Check cache
-    ck = _cache_key(transcript.text, used_model)
-    cached = _cache_get(ck)
-    if cached:
-        logger.info("Cache hit for model={}", used_model)
-        return cached
-
-    # Smart truncation (preserves beginning + end)
-    text = smart_truncate(transcript.text)
-
-    # Estimate duration
+def _build_video_prompt(transcript: Transcript, text: str) -> tuple[str, str]:
+    """Build system + user prompts for video content."""
     duration_sec = 0
     if transcript.segments:
         last = transcript.segments[-1]
@@ -201,11 +199,11 @@ async def analyze_transcript(transcript: Transcript, model: str = "") -> dict:
 
     user_prompt = f"""Analyze this video transcript and extract knowledge:
 
-Transcript source: {transcript.source}
+Source: {transcript.source}
 Language: {transcript.language}
 Video duration: {duration_str} ({duration_sec} seconds)
 
-IMPORTANT: All timestamps must be between 0:00 and {duration_str}. Do not generate timestamps beyond the video duration.
+IMPORTANT: All timestamps must be between 0:00 and {duration_str}.
 
 ---
 {text}
@@ -213,12 +211,60 @@ IMPORTANT: All timestamps must be between 0:00 and {duration_str}. Do not genera
 
 Generate a comprehensive analysis with flashcards for spaced repetition."""
 
+    return _VIDEO_PROMPT, user_prompt
+
+
+def _build_text_prompt(transcript: Transcript, text: str) -> tuple[str, str]:
+    """Build system + user prompts for article/book content."""
+    word_count = len(text.split())
+
+    user_prompt = f"""Analyze this text and extract knowledge:
+
+Source: {transcript.source}
+Language: {transcript.language}
+Length: ~{word_count} words
+
+---
+{text}
+---
+
+Generate a comprehensive analysis with flashcards, vocabulary terms, and memorable quotes for retention."""
+
+    return _TEXT_PROMPT, user_prompt
+
+
+async def analyze_transcript(transcript: Transcript, model: str = "", source_type: str = "") -> dict:
+    """Analyze content. source_type: 'video' (default), 'article', 'pdf', 'text'."""
+    used_model = model or settings.llm_model
+
+    if not settings.openrouter_api_key:
+        raise AnalysisError(
+            "No API key configured. Set PM_OPENROUTER_API_KEY or OPENROUTER_API_KEY."
+        )
+
+    if not source_type:
+        source_type = "video" if transcript.source in (
+            "youtube_auto", "youtube_manual", "groq_whisper",
+        ) or "groq_whisper" in transcript.source or "subtitles" in transcript.source else "text"
+
+    ck = _cache_key(transcript.text, used_model)
+    cached = _cache_get(ck)
+    if cached:
+        logger.info("Cache hit for model={}", used_model)
+        return cached
+
+    text = smart_truncate(transcript.text)
+
+    if source_type == "video":
+        system_prompt, user_prompt = _build_video_prompt(transcript, text)
+    else:
+        system_prompt, user_prompt = _build_text_prompt(transcript, text)
+
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
     ]
 
-    # Try primary model, then fallbacks
     models_to_try = [used_model] + [m for m in FALLBACK_MODELS if m != used_model]
 
     last_error = None
@@ -228,9 +274,8 @@ Generate a comprehensive analysis with flashcards for spaced repetition."""
                 logger.warning("Fallback to model: {}", m)
 
             content = await _call_llm(m, messages)
-            result = _parse_llm_response(content, m, transcript)
+            result = _parse_llm_response(content, m, transcript, source_type)
 
-            # Cache successful result
             _cache_put(ck, result)
             return result
 
