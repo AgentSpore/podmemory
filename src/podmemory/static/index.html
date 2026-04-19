@@ -944,6 +944,31 @@ nav {
   .quiz-card { min-height: 200px; }
 }
 </style>
+<!-- Telegram Mini App integration — preserves host app aesthetic -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  /* Only leaks into neutrals — app's signature palette stays dominant */
+  body.tg-webapp {
+    min-height: var(--tg-viewport-stable-height, 100dvh);
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    overflow-x: hidden;
+  }
+  body.tg-webapp ::-webkit-scrollbar { width: 6px; height: 6px; }
+  body.tg-webapp ::-webkit-scrollbar-thumb {
+    background: var(--tg-theme-hint-color, rgba(0,0,0,.2));
+    border-radius: 3px;
+  }
+  body.tg-webapp input::placeholder,
+  body.tg-webapp textarea::placeholder {
+    color: var(--tg-theme-hint-color, inherit);
+    opacity: 0.7;
+  }
+  /* Opt-in: any fixed header gets safe-area top padding when in TG */
+  body.tg-webapp [data-tg-header] {
+    padding-top: calc(env(safe-area-inset-top) + 12px);
+  }
+</style>
 </head>
 <body>
 <div id="app">
@@ -1920,6 +1945,66 @@ document.addEventListener('keydown', e => {
 });
 
 updateQuizBadge();
+</script>
+<script>
+/* Telegram Mini App bootstrap — silent no-op outside Telegram */
+(function () {
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if (!tg || !tg.initData) return;
+
+  document.body.classList.add('tg-webapp');
+  try { tg.ready(); } catch (_) {}
+  try { tg.expand(); } catch (_) {}
+
+  /* Stable viewport height — fixes iOS bounce + keyboard layout shift */
+  const syncHeight = () => {
+    const h = tg.viewportStableHeight || tg.viewportHeight || window.innerHeight;
+    document.documentElement.style.setProperty('--tg-viewport-stable-height', h + 'px');
+  };
+  syncHeight();
+  tg.onEvent && tg.onEvent('viewportChanged', syncHeight);
+  window.addEventListener('resize', syncHeight);
+
+  /* BackButton — shown on any hash route or deep-linked state. */
+  const back = tg.BackButton;
+  const updateBack = () => {
+    const hasRoute = location.hash && location.hash !== '#' && location.hash !== '#/';
+    (hasRoute || (history.state && history.state.__tgDeep)) ? back.show() : back.hide();
+  };
+  back.onClick(() => {
+    if (location.hash || (history.state && history.state.__tgDeep)) history.back();
+    else tg.close();
+  });
+  window.addEventListener('hashchange', updateBack);
+  window.addEventListener('popstate', updateBack);
+  updateBack();
+
+  /* Haptics — window.tgHaptic('success'|'error'|'warning'|
+                                'light'|'medium'|'heavy'|'rigid'|'soft'|'tick') */
+  window.tgHaptic = function (kind) {
+    const hf = tg.HapticFeedback;
+    if (!hf) return;
+    try {
+      if (kind === 'success' || kind === 'error' || kind === 'warning') hf.notificationOccurred(kind);
+      else if (kind === 'light' || kind === 'medium' || kind === 'heavy' ||
+               kind === 'rigid' || kind === 'soft') hf.impactOccurred(kind);
+      else hf.selectionChanged();
+    } catch (_) {}
+  };
+
+  /* Closing confirmation — call window.tgConfirmClose(true) when user has unsaved work */
+  window.tgConfirmClose = function (on) {
+    try { on ? tg.enableClosingConfirmation() : tg.disableClosingConfirmation(); } catch (_) {}
+  };
+
+  /* Expose user + signed initData for backend HMAC verification */
+  window.tgUser = (tg.initDataUnsafe && tg.initDataUnsafe.user) || null;
+  window.tgInitData = tg.initData;
+
+  document.dispatchEvent(new CustomEvent('tg:ready', {
+    detail: { tg: tg, user: window.tgUser, platform: tg.platform, colorScheme: tg.colorScheme }
+  }));
+})();
 </script>
 </body>
 </html>
