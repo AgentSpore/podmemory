@@ -22,6 +22,11 @@ from ..core.config import settings
 
 _WHISPER_MODELS = ["whisper-large-v3-turbo", "whisper-large-v3"]
 
+
+def _yt_proxy() -> str | None:
+    """Return SOCKS5/HTTP proxy URL for yt-dlp (bypass datacenter IP rate limits)."""
+    return os.getenv("YT_PROXY_URL") or os.getenv("IG_PROXY_URL") or None
+
 # SRT/VTT noise: timestamps, sequence numbers, headers, HTML tags
 _SUB_TIMESTAMP_RE = re.compile(r"\d{2}:\d{2}[:\.,]\d{2,3}\s*-->.*")
 _SUB_HTML_TAG_RE = re.compile(r"<[^>]+>")
@@ -51,7 +56,7 @@ async def fetch_subtitles(url: str) -> dict | None:
     Returns {text, source, language} or None if unavailable.
     """
     def _fetch() -> dict | None:
-        with yt_dlp.YoutubeDL({"quiet": True, "skip_download": True, "writesubtitles": True}) as ydl:
+        with yt_dlp.YoutubeDL({"quiet": True, "skip_download": True, "writesubtitles": True, "proxy": _yt_proxy()}) as ydl:
             info = ydl.extract_info(url, download=False)
 
         subs = info.get("subtitles") or {}
@@ -90,7 +95,7 @@ async def transcribe_with_groq(audio_data: bytes, filename: str = "audio.mp3") -
             async with httpx.AsyncClient(timeout=120) as client:
                 with open(tmp, "rb") as f:
                     resp = await client.post(
-                        "https://api.groq.com/openai/v1/audio/transcriptions",
+                        f"{os.getenv('GROQ_BASE_URL', 'https://api.groq.com')}/openai/v1/audio/transcriptions",
                         headers={"Authorization": f"Bearer {settings.groq_api_key}"},
                         files={"file": (tmp.name, f, "audio/mpeg")},
                         data={"model": model, "response_format": "verbose_json"},
@@ -138,6 +143,7 @@ async def download_audio(url: str) -> Path:
             }],
             "download_ranges": yt_dlp.utils.download_range_func(None, [(0, 900)]),
             "force_keyframes_at_cuts": True,
+            "proxy": _yt_proxy(),
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
