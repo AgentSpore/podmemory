@@ -9,6 +9,7 @@
 !src/podmemory/schemas/
 !src/podmemory/services/
 !src/podmemory/static/
+src/**
 !src/podmemory/__init__.py
 !src/podmemory/api/__init__.py
 !src/podmemory/api/analyze.py
@@ -19,6 +20,7 @@
 !src/podmemory/schemas/analysis.py
 !src/podmemory/services/__init__.py
 !src/podmemory/services/analyzer.py
+!src/podmemory/services/model_catalog.py
 !src/podmemory/services/audio_transcript.py
 !src/podmemory/services/text_extract.py
 !src/podmemory/services/transcript.py
