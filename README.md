@@ -34,6 +34,10 @@ YouTube uses its subtitle API. Other supported video/audio sources include VK, R
 
 The FastAPI backend serves a single HTML/JavaScript PWA. API routes live in `src/podmemory/api/`, processing in `src/podmemory/services/`, request/response models in `src/podmemory/schemas/`. Library and spaced repetition state live in the browser. The application has no persistent user database.
 
+## Model selection
+
+Client-selected models must match `PM_LLM_MODEL` or appear in the current free text-model catalog returned by `/api/config`. An omitted or empty `model` uses `PM_LLM_MODEL`. If refreshing the catalog fails, stale entries do not authorize a selection; unavailable or empty catalogs retry after five seconds. The same policy applies to fallback attempts: the server preserves their order but skips models outside the fresh catalog unless explicitly configured as `PM_LLM_MODEL`.
+
 ## Development
 
 Python 3.13 matches the container runtime. System `ffmpeg` is needed for audio extraction. Python dependencies are resolved in `uv.lock`; do not regenerate the lock during a release build.

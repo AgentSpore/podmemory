@@ -13,6 +13,7 @@ from loguru import logger
 
 from ..core.config import settings
 from .transcript import Transcript
+from .model_catalog import filter_allowed_models
 
 _VIDEO_PROMPT = """You are PodMemory — an expert knowledge extraction AI.
 Your job: take a video transcript and extract maximum learning value from it.
@@ -236,7 +237,8 @@ Generate a comprehensive analysis with flashcards, vocabulary terms, and memorab
 async def analyze_transcript(transcript: Transcript, model: str = "", source_type: str = "") -> dict:
     """Analyze content. source_type: 'video' (default), 'article', 'pdf', 'text'."""
     used_model = model or settings.llm_model
-
+    if not await filter_allowed_models([used_model], settings.llm_model):
+        raise AnalysisError("Model is not available.")
     if not settings.openrouter_api_key:
         raise AnalysisError(
             "No API key configured. Set PM_OPENROUTER_API_KEY or OPENROUTER_API_KEY."
@@ -254,7 +256,6 @@ async def analyze_transcript(transcript: Transcript, model: str = "", source_typ
         return cached
 
     text = smart_truncate(transcript.text)
-
     if source_type == "video":
         system_prompt, user_prompt = _build_video_prompt(transcript, text)
     else:
@@ -266,9 +267,21 @@ async def analyze_transcript(transcript: Transcript, model: str = "", source_typ
     ]
 
     models_to_try = [used_model] + [m for m in FALLBACK_MODELS if m != used_model]
+    result = await _analyze_with_models(models_to_try, messages, transcript, source_type)
+    _cache_put(ck, result)
+    return result
 
+
+async def _analyze_with_models(
+    models_to_try: list[str], messages: list[dict], transcript: Transcript, source_type: str,
+) -> dict:
     last_error = None
+    allowed_fallbacks = []
     for i, m in enumerate(models_to_try):
+        if i == 1:
+            allowed_fallbacks = await filter_allowed_models(models_to_try[1:], settings.llm_model)
+        if i > 0 and m not in allowed_fallbacks:
+            continue
         try:
             if i > 0:
                 logger.warning("Fallback to model: {}", m)
@@ -276,7 +289,6 @@ async def analyze_transcript(transcript: Transcript, model: str = "", source_typ
             content = await _call_llm(m, messages)
             result = _parse_llm_response(content, m, transcript, source_type)
 
-            _cache_put(ck, result)
             return result
 
         except (AnalysisError, json.JSONDecodeError, httpx.TimeoutException, Exception) as e:
