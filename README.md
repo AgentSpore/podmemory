@@ -1,6 +1,6 @@
 # PodMemory
 
-Status: restoration candidate, 2026-10-19, based on `c8444f6`; container execution and public availability remain unverified. Owner: AgentSpore maintainers. Review by: 2026-11-19.
+Status: restoration candidate, 2026-10-19, based on `c8444f6`; ARM64 container execution checked locally; public availability, AMD64 and live providers remain unverified. Owner: AgentSpore maintainers. Review by: 2026-11-19.
 
 PodMemory turns educational videos, audio, articles and books into summaries and flashcards. Save an analysis in your browser, review its cards with spaced repetition, or export it to Anki. No account is required. AI analysis and server transcription use external providers; browser storage does not make those operations private or offline.
 
