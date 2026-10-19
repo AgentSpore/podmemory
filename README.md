@@ -1,189 +1,94 @@
 # PodMemory
 
-**Video Knowledge Extraction** — paste a YouTube link or upload any audio/video file. AI extracts key insights, generates flashcards, and helps you remember everything with spaced repetition.
+Status: restoration candidate, 2026-10-19, based on `c8444f6`; container execution and public availability remain unverified. Owner: AgentSpore maintainers. Review by: 2026-11-19.
 
-## Problem
+PodMemory turns educational videos, audio, articles and books into summaries and flashcards. Save an analysis in your browser, review its cards with spaced repetition, or export it to Anki. No account is required. AI analysis and server transcription use external providers; browser storage does not make those operations private or offline.
 
-People watch hours of educational content — YouTube lectures, podcasts, tutorials — and forget 90% within a week. Existing note-taking tools require manual effort. There's no simple way to automatically extract and retain knowledge from video.
+## What happens to your input
 
-## Solution
+| Input or action | Processing | Result | Does not do |
+|---|---|---|---|
+| Video URL | Server retrieves subtitles; supported sources may use downloaded audio and Groq transcription | Transcript and AI analysis | Guarantee access to every source or region |
+| Audio/video file | Browser first uploads the file to the server for Groq; browser Whisper is a fallback | Transcript for review and analysis | Keep every file exclusively on your device |
+| Article URL, PDF or EPUB | Server extracts text; selected text is sent for AI analysis | Summary, cards and source-specific material | Avoid server processing |
+| Save, quiz, JSON backup | Browser localStorage and local files | Personal library and review schedule | Synchronize across devices or survive cleared browser storage |
+| Anki export | Server generates an `.apkg` response | Downloadable deck | Require a paid subscription in this source version |
 
-PodMemory automates the entire pipeline:
+The backend sends transcript or extracted text to OpenRouter for analysis. Groq receives audio during server transcription. Browser Whisper downloads model files from third-party hosts. Provider terms and availability apply. Temporary media and in-memory caches exist on the server; do not interpret this as a guarantee of immediate deletion.
 
-1. **Paste YouTube URL** — transcript extracted instantly via subtitle API
-2. **Or drop any audio/video file** — transcribed in-browser via Whisper.js (100% private, no server upload)
-3. **AI analyzes** — free LLM generates structured knowledge extraction
-4. **Spaced repetition** — SM-2 algorithm schedules flashcard reviews for optimal retention
+## Try the workflow
 
-## Features
+1. Paste a supported video/article URL, paste text, or choose a file.
+2. Follow the progress messages and review an editable transcript when offered.
+3. Read the summary and flashcards, then save the analysis to Library.
+4. Open Quiz to review due cards; flip a card and rate its difficulty.
+5. Export your library as JSON for backup, or download Markdown/Anki material.
 
-### Analyze
-- YouTube URL → instant transcript extraction (auto-subtitles)
-- File upload (MP3, MP4, WAV, WebM, M4A, OGG) → Whisper.js browser-side transcription
-- 27+ free AI models via OpenRouter (Gemma, Llama, Mistral, NVIDIA Nemotron, Qwen, etc.)
-- Structured output: title, TL;DR, key insights, flashcards, timestamps, action items, tags
+Given one saved analysis with five cards, when you reload the same browser, the library should still contain that analysis. Clearing site storage removes it unless you have exported a backup. This example is a verification scenario, not evidence of a completed browser test.
 
-### Quiz (Spaced Repetition)
-- SM-2 algorithm for optimal review scheduling
-- Tap to flip cards, rate difficulty (Again / Hard / Good / Easy)
-- Session stats: cards reviewed, accuracy percentage
-- Keyboard shortcuts: Space (flip), 1-4 (rate)
+The interface contains English, Russian and Chinese dictionaries. Some progress/error messages remain English. Mobile layout, accessibility and complete EN/RU journeys require browser verification before release.
 
-### Library
-- Save unlimited analyses to localStorage
-- Search by title or tags
-- Export/Import JSON backup
-- Download individual analyses as Markdown (.md)
+## Source support and architecture
 
-### Design
-- Neobrutalist editorial aesthetic (Clash Display, Plus Jakarta Sans, IBM Plex Mono)
-- Light mode (warm paper) + Dark mode (chocolate)
-- Mobile-first responsive PWA
-- Dot grid pattern background, bold borders, shadow depth
+YouTube uses its subtitle API. Other supported video/audio sources include VK, Rutube, Dzen, OK, Vimeo, SoundCloud, Twitch, Rumble, Telegram, Apple Podcasts, Bilibili, Coub and Yandex Music. Source restrictions, region limits and subtitle availability can prevent extraction. Article URLs use trafilatura; PDF and EPUB use their corresponding parsers.
 
-## Architecture
+The FastAPI backend serves a single HTML/JavaScript PWA. API routes live in `src/podmemory/api/`, processing in `src/podmemory/services/`, request/response models in `src/podmemory/schemas/`. Library and spaced repetition state live in the browser. The application has no persistent user database.
 
-```
-┌─────────────────────────────────────────┐
-│  Browser (PWA)                          │
-│  ┌──────────┐  ┌──────────┐            │
-│  │ Whisper.js│  │ SM-2 Quiz│            │
-│  │ (local   │  │ (local   │            │
-│  │ transcr.)│  │ storage) │            │
-│  └──────────┘  └──────────┘            │
-│         │                               │
-│         ▼ transcript text               │
-│  ┌─────────────────────┐               │
-│  │  POST /api/analyze   │──── URL ────► │
-│  └─────────────────────┘               │
-└─────────────────┬───────────────────────┘
-                  │
-    ┌─────────────▼─────────────┐
-    │  FastAPI Backend           │
-    │  ┌──────────────────────┐ │
-    │  │ YouTube Transcript API│ │
-    │  │ (subtitle extraction) │ │
-    │  └──────────────────────┘ │
-    │  ┌──────────────────────┐ │
-    │  │ OpenRouter LLM       │ │
-    │  │ (free models)        │ │
-    │  └──────────────────────┘ │
-    └───────────────────────────┘
-```
+## Development
 
-### Tech Stack
-- **Backend**: Python 3.13, FastAPI, Pydantic
-- **Frontend**: Vanilla JS, CSS (single HTML file, no frameworks)
-- **Transcription**: youtube-transcript-api (YouTube), Whisper.js/transformers.js (browser-side for files)
-- **LLM**: OpenRouter API (27+ free models)
-- **Storage**: localStorage (stateless server, privacy-first)
-- **PWA**: manifest.json, installable, offline library access
-
-### API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/` | Serve PWA |
-| GET | `/health` | Health check |
-| GET | `/api/config` | Free models list + default model |
-| POST | `/api/analyze` | Analyze video (URL or transcript text) |
-
-### POST /api/analyze
-
-**Request:**
-```json
-{
-  "url": "https://www.youtube.com/watch?v=...",
-  "text": "",
-  "model": "google/gemma-3-27b-it:free"
-}
-```
-
-**Response:**
-```json
-{
-  "title": "Video Title",
-  "tldr": "2-3 sentence summary",
-  "key_insights": ["insight 1", "insight 2"],
-  "flashcards": [{"q": "Question?", "a": "Answer"}],
-  "timestamps": [{"time": "0:00", "label": "Intro"}],
-  "action_items": ["Do this"],
-  "tags": ["topic1", "topic2"],
-  "difficulty": "intermediate",
-  "model_used": "google/gemma-3-27b-it:free"
-}
-```
-
-## Running Locally
+Python 3.13 matches the container runtime. System `ffmpeg` is needed for audio extraction. Python dependencies are resolved in `uv.lock`; do not regenerate the lock during a release build.
 
 ```bash
 # Install dependencies
-uv sync
+uv sync --locked --extra dev
 
 # Set API key
-export OPENROUTER_API_KEY=sk-or-...
+# Provide keys locally through your approved secret-management mechanism.
 
 # Run
-make dev
+uv run --locked --no-dev uvicorn podmemory.main:app --host 127.0.0.1 --port 8000
 # → http://localhost:8000
 ```
 
-## Deployment
+Required variable names:
+
+- `GROQ_API_KEY` or `PM_GROQ_API_KEY`: required at application startup.
+- `OPENROUTER_API_KEY`: needed for AI analysis.
+- `PM_LLM_MODEL`: optional model selection.
+
+Never put actual keys into source, command examples, screenshots or issue reports. Importing the application creates its settings, so tests must run with an isolated environment and synthetic values, not inherited production credentials.
+
+The existing suite can be invoked with `uv run --locked --extra dev pytest tests/ -q`. Provider boundaries are mocked in several tests; passing them does not establish live provider availability, real browser behavior or container readiness.
+
+## Container packaging and deployment contract
+
+The Dockerfile pins the Python 3.13 base and uv image by digest, installs locked production dependencies into a baked virtual environment, includes ffmpeg, and runs uvicorn directly as UID/GID `10001`. No package installation or dependency resolution occurs at startup. `.dockerignore` permits only the explicit build inputs and listed application files; repository metadata, tests, local environments and credentials are excluded.
+
+A deployment must supply a read-only root filesystem and a size-limited writable `/tmp`. The image alone cannot enforce the mount size. The following commands are proposed acceptance inputs; they have not been executed for this restoration candidate:
 
 ```bash
-docker build -t podmemory .
-docker run -p 8000:8000 -e OPENROUTER_API_KEY=sk-or-... podmemory
+docker build --provenance=false -t podmemory:restore .
+docker run --rm --read-only --cap-drop=ALL \
+  --security-opt=no-new-privileges --memory=768m --cpus=1 --pids-limit=128 \
+  --tmpfs /tmp:rw,noexec,nosuid,size=256m,mode=1777 \
+  --env-file /absolute/path/to/podmemory-runtime.env \
+  -p 127.0.0.1:8000:8000 podmemory:restore
 ```
 
-## Market Analysis
+The runtime environment file is supplied and protected by the operator; it is never copied into the image or read for diagnostics. A private synthetic test environment must be used before public deployment. The 256 MiB temporary storage ceiling limits media workloads; test the intended input sizes and error behavior before changing that bound.
 
-### TAM (Total Addressable Market)
-- 2.7B YouTube users worldwide
-- 500M+ podcast listeners
-- EdTech market: $400B by 2027
+Health is exposed at `/health`; the image checks it with a bounded HTTP request. A healthy endpoint does not prove model analysis, subtitle access, uploads or browser fallback. Public deployment additionally needs TLS, request/resource limits, controlled outbound access and acceptance of the actual EN/RU user scenarios. The apt-installed ffmpeg dependency and the pyproject build backend are not pinned to a distribution snapshot or build-tool lock, so the image build is not claimed byte-for-byte reproducible.
 
-### SAM (Serviceable Addressable Market)
-- 50M+ students/professionals who watch educational content regularly
-- 10M+ users of spaced repetition tools (Anki, Quizlet)
+## Release checks
 
-### SOM (Serviceable Obtainable Market)
-- Target: 100K users in year 1 (students, lifelong learners, professionals)
+- Locked dependency installation succeeds without changing `pyproject.toml` or `uv.lock`.
+- The image builds, starts without root, serves its static assets and passes health checks.
+- Read-only root and bounded temporary storage work for extraction and export.
+- Unavailable providers, invalid files and missing subtitles produce usable errors.
+- EN/RU desktop and mobile workflows, backups and Cyrillic Anki filenames are checked.
+- URL fetching remains protected with the exact locked dependencies and deployment network configuration; a narrow loopback probe does not establish global SSRF safety.
 
-### Monetization
-- **Free**: 5 analyses/month, unlimited quiz
-- **Pro ($7/mo)**: Unlimited analyses, priority models, Anki export, team sharing
-
-### Unit Economics
-- LTV: $42 (avg 6 months at $7)
-- CAC: $3-5 (organic + Reddit/YouTube marketing)
-- LTV/CAC: 8-14x
-- Gross margin: 92% (only cost: OpenRouter API calls)
-
-### Competitive Advantage
-| Feature | PodMemory | Snipd | Anki | Quizlet |
-|---------|-----------|-------|------|---------|
-| YouTube support | Yes | No | No | No |
-| Auto-extract flashcards | Yes | Partial | No | No |
-| Spaced repetition | SM-2 | No | SM-2 | Basic |
-| File upload (any video) | Yes (browser) | No | No | No |
-| Free | Yes | Freemium | Yes | Freemium |
-| Privacy (client-side) | Yes | No | Yes | No |
-
-## ICP (Ideal Customer Profile)
-
-1. **Students** (18-25) watching lecture recordings, wanting to retain material
-2. **Professionals** (25-40) consuming industry talks, conferences, webinars
-3. **Lifelong learners** (30-55) watching documentaries, educational YouTube
-4. **Language learners** using video content for immersion
-
-## Risks
-
-| Risk | Mitigation |
-|------|------------|
-| YouTube blocks transcript API | Whisper.js fallback for any uploaded file |
-| OpenRouter removes free models | Multi-provider support, can add any API |
-| Browser Whisper.js slow on mobile | YouTube remains instant; file upload is optional |
-| Competition from Snipd/Quizlet | Unique combo: any video + auto-extract + SR |
+No restoration release or public deployment is claimed by this document.
 
 ## License
 
