@@ -39,7 +39,7 @@ def test_health(client: TestClient):
 def test_config_returns_models_list(client: TestClient):
     """Config endpoint returns models as a list (may be empty if network unavailable)."""
     with patch(
-        "podmemory.api.analyze._fetch_free_models",
+        "podmemory.api.analyze.fetch_free_models",
         new_callable=AsyncMock,
         return_value=[
             {"id": "test/model-a", "name": "Model A", "context_length": 4096},

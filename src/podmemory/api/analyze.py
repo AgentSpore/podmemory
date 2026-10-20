@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import AsyncGenerator
 
 import genanki
-import httpx
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import FileResponse, Response
 from loguru import logger
@@ -17,6 +16,7 @@ from sse_starlette.sse import EventSourceResponse
 from ..core.config import settings
 from ..schemas.analysis import AnalyzeRequest, AnalysisResponse, AnkiExportRequest
 from ..services.analyzer import analyze_transcript, AnalysisError
+from ..services.model_catalog import fetch_free_models
 from ..services.transcript import (
     detect_platform,
     get_youtube_transcript,
@@ -26,10 +26,6 @@ from ..services.audio_transcript import download_audio, fetch_subtitles, transcr
 from ..services.text_extract import extract_from_url, extract_from_pdf, extract_from_epub
 
 router = APIRouter(prefix="/api", tags=["analysis"])
-
-_models_cache: list[dict] = []
-_models_cache_ts: float = 0
-CACHE_TTL = 3600
 
 _yt_lock = asyncio.Lock()
 _yt_last_request: float = 0
@@ -43,38 +39,9 @@ import uuid
 _temp_audio: dict[str, Path] = {}  # id → path, cleaned up after download
 
 
-async def _fetch_free_models() -> list[dict]:
-    global _models_cache, _models_cache_ts
-    if _models_cache and time.time() - _models_cache_ts < CACHE_TTL:
-        return _models_cache
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get("https://openrouter.ai/api/v1/models")
-            data = resp.json()
-            models = []
-            for m in data.get("data", []):
-                pricing = m.get("pricing", {})
-                if pricing.get("prompt") == "0" and pricing.get("completion") == "0":
-                    modalities = m.get("architecture", {}).get("output_modalities", [])
-                    if "text" not in modalities:
-                        continue
-                    models.append({
-                        "id": m["id"],
-                        "name": m.get("name", m["id"]),
-                        "context_length": m.get("context_length", 0),
-                    })
-            models.sort(key=lambda x: x["name"])
-            _models_cache = models
-            _models_cache_ts = time.time()
-            return models
-    except Exception as e:
-        logger.warning("Failed to fetch models: {}", e)
-        return _models_cache or []
-
-
 @router.get("/config")
 async def get_config():
-    models = await _fetch_free_models()
+    models = await fetch_free_models()
     default = settings.llm_model
     free_ids = {m["id"] for m in models}
     if default not in free_ids and models:
