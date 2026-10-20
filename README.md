@@ -54,11 +54,13 @@ uv run --locked --no-dev uvicorn podmemory.main:app --host 127.0.0.1 --port 8000
 # → http://localhost:8000
 ```
 
-Required variable names:
+Provider variable names:
 
-- `GROQ_API_KEY` or `PM_GROQ_API_KEY`: required at application startup.
+- `GROQ_API_KEY` or `PM_GROQ_API_KEY`: needed for server audio transcription.
 - `OPENROUTER_API_KEY`: needed for AI analysis.
 - `PM_LLM_MODEL`: optional model selection.
+
+The application starts without provider keys. With an existing JSON backup, you can use Library import, Quiz and export without AI providers; creating a new analysis still requires OpenRouter. Server audio transcription returns `503 GROQ_UNAVAILABLE` when Groq is not configured, before creating a temporary audio file or an HTTP client. Browser Whisper may download external model files, so it is not an offline guarantee.
 
 Never put actual keys into source, command examples, screenshots or issue reports. Importing the application creates its settings, so tests must run with an isolated environment and synthetic values, not inherited production credentials.
 

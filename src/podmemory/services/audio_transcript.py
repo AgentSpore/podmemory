@@ -80,6 +80,9 @@ async def fetch_subtitles(url: str) -> dict | None:
 
 async def transcribe_with_groq(audio_data: bytes, filename: str = "audio.mp3") -> dict:
     """Transcribe via Groq Whisper API. Cascades: turbo → v3 on 403/429/503."""
+    if not settings.groq_api_key:
+        raise RuntimeError("NO_GROQ_KEY")
+
     fd, tmp_path = tempfile.mkstemp(suffix=Path(filename).suffix or ".mp3")
     tmp = Path(tmp_path)
     try:
