@@ -14,7 +14,6 @@ import re
 from dataclasses import dataclass
 
 import trafilatura
-import ebooklib
 from bs4 import BeautifulSoup
 from ebooklib import epub
 from loguru import logger
@@ -144,12 +143,45 @@ def _html_to_text(html: str) -> str:
     return soup.get_text(separator="\n", strip=True)
 
 
+def _read_epub_with_fallbacks(epub_data: bytes) -> tuple[epub.EpubBook, dict[str, str | None]]:
+    """Retain fallback metadata from the exact OPF selected by the locked EbookLib reader."""
+    import io
+
+    reader = epub.EpubReader(io.BytesIO(epub_data))
+    book = reader.load()
+    reader.process()
+    # EbookLib drops fallback attributes when constructing EpubItem objects.
+    manifest = reader.container.findall(
+        "{http://www.idpf.org/2007/opf}manifest/{http://www.idpf.org/2007/opf}item"
+    )
+    return book, {item.get("id"): item.get("fallback") for item in manifest if item.get("id")}
+
+
+def _epub_document(
+    idref: str | None,
+    items: dict[str, epub.EpubItem],
+    fallbacks: dict[str, str | None],
+) -> epub.EpubItem | None:
+    """Resolve at most one supported XHTML alternative per primary spine position."""
+    visited = set()
+    for _ in range(len(items)):
+        if not idref or idref in visited:
+            break
+        visited.add(idref)
+        item = items.get(idref)
+        if item is None:
+            break
+        if item.media_type == "application/xhtml+xml":
+            return item
+        idref = fallbacks.get(idref)
+    return None
+
+
 async def extract_from_epub(epub_data: bytes, filename: str = "book.epub") -> ExtractedText:
     """Extract text from EPUB with chapter-level structure."""
     def _extract() -> tuple[str, str, list[dict]]:
-        import io
-
-        book = epub.read_epub(io.BytesIO(epub_data))
+        book, fallbacks = _read_epub_with_fallbacks(epub_data)
+        items = {item.get_id(): item for item in book.get_items()}
 
         # Metadata
         title = ""
@@ -168,7 +200,12 @@ async def extract_from_epub(epub_data: bytes, filename: str = "book.epub") -> Ex
         chapters: list[dict] = []
         full_parts: list[str] = []
 
-        for item in book.get_items_of_type(ebooklib.ITEM_DOCUMENT):
+        for idref, linear in book.spine:
+            if linear == "no":
+                continue
+            item = _epub_document(idref, items, fallbacks)
+            if item is None:
+                continue
             html = item.get_content().decode("utf-8", errors="replace")
             text = _html_to_text(html)
             if len(text.strip()) < 30:
