@@ -1836,12 +1836,45 @@ document.getElementById('exportBtn').onclick = () => {
 };
 
 document.getElementById('importBtn').onclick = () => document.getElementById('importFile').click();
+function validateLibraryBackup(data) {
+  const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+  const strings = value => Array.isArray(value) && value.every(item => typeof item === 'string');
+  const records = (value, fields) => Array.isArray(value) && value.every(item =>
+    object(item) && fields.every(field => typeof item[field] === 'string'));
+  if (!object(data) || (!Object.hasOwn(data, 'library') && !Object.hasOwn(data, 'srData')))
+    throw new Error('Invalid backup');
+  if (Object.hasOwn(data, 'library')) {
+    if (!Array.isArray(data.library)) throw new Error('Invalid library');
+    const ids = new Set();
+    for (const item of data.library) {
+      if (!object(item) || typeof item.id !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(item.id) ||
+          ids.has(item.id) || typeof item.title !== 'string') throw new Error('Invalid analysis');
+      ids.add(item.id);
+      for (const field of ['tags', 'key_insights', 'quotes', 'action_items'])
+        if (item[field] != null && !strings(item[field])) throw new Error('Invalid list');
+      for (const [field, fields] of [['flashcards', ['q', 'a']], ['timestamps', ['time', 'label']],
+                                    ['vocabulary', ['term', 'definition']]])
+        if (item[field] != null && !records(item[field], fields)) throw new Error('Invalid records');
+      for (const field of ['url', 'tldr', 'difficulty', 'model_used', 'analyzed_at'])
+        if (item[field] != null && typeof item[field] !== 'string') throw new Error('Invalid text');
+    }
+  }
+  if (Object.hasOwn(data, 'srData')) {
+    if (!object(data.srData)) throw new Error('Invalid review schedule');
+    for (const card of Object.values(data.srData)) {
+      if (!object(card) || !['ef', 'interval', 'repetitions', 'nextReview'].every(field =>
+          typeof card[field] === 'number' && Number.isFinite(card[field]) && card[field] >= 0))
+        throw new Error('Invalid review card');
+    }
+  }
+}
 document.getElementById('importFile').onchange = e => {
   const file = e.target.files[0]; if (!file) return;
   const reader = new FileReader();
   reader.onload = ev => {
     try {
       const data = JSON.parse(ev.target.result);
+      validateLibraryBackup(data);
       if (data.library) { library = data.library; localStorage.setItem('pm_library', JSON.stringify(library)); }
       if (data.srData) { srData = data.srData; localStorage.setItem('pm_sr', JSON.stringify(srData)); }
       renderLibrary(); updateQuizBadge();
