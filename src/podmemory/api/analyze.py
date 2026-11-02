@@ -5,6 +5,7 @@ import re
 import tempfile
 import time
 from pathlib import Path
+from dataclasses import dataclass
 from typing import AsyncGenerator
 
 import genanki
@@ -12,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import FileResponse, Response
 from loguru import logger
 from sse_starlette.sse import EventSourceResponse
+from starlette.types import Receive, Scope, Send
 
 from ..core.config import settings
 from ..schemas.analysis import AnalyzeRequest, AnalysisResponse, AnkiExportRequest
@@ -36,7 +38,87 @@ _YT_VIDEO_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{11}$")
 
 # Temp audio files for browser Whisper fallback (when Groq is unavailable)
 import uuid
-_temp_audio: dict[str, Path] = {}  # id → path, cleaned up after download
+_TEMP_AUDIO_TTL = 300  # Browser fetches immediately; abandoned offers expire in five minutes.
+_TEMP_AUDIO_MAX_FILES = 8
+_TEMP_AUDIO_MAX_BYTES = 50 * 1024 * 1024
+_MAX_TRANSCRIPTION_BYTES = 25 * 1024 * 1024
+
+
+@dataclass
+class _AudioOwner:
+    path: Path
+    size: int
+    retry: asyncio.TimerHandle | None = None
+
+
+# Pending links own an expiry timer; a GET consumes only this one-shot eligibility.
+_temp_audio: dict[str, tuple[Path, asyncio.TimerHandle]] = {}
+# Count and bytes include pending AND claimed/streaming files until removal succeeds.
+_audio_owners: dict[str, _AudioOwner] = {}
+
+
+def _remove_audio_file(path: Path) -> bool:
+    """Return whether the audio was removed; an empty-directory failure is harmless."""
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        return False
+    try:
+        path.parent.rmdir()
+    except OSError:
+        pass
+    return True
+
+
+def _release_temp_audio(audio_id: str) -> None:
+    pending = _temp_audio.pop(audio_id, None)
+    if pending is not None:
+        pending[1].cancel()
+    owner = _audio_owners.get(audio_id)
+    if owner is None:
+        return
+    if owner.retry is not None:
+        owner.retry.cancel()
+    if _remove_audio_file(owner.path):
+        _audio_owners.pop(audio_id)
+    else:
+        # Keep failed deletions charged to the budget; never expose paths/tokens.
+        logger.warning("Temporary audio cleanup failed; capacity remains reserved")
+        owner.retry = asyncio.get_running_loop().call_later(1, _release_temp_audio, audio_id)
+
+
+def _expire_temp_audio(audio_id: str) -> None:
+    if audio_id in _temp_audio:
+        _release_temp_audio(audio_id)
+
+
+def _offer_temp_audio(path: Path) -> str | None:
+    size = path.stat().st_size
+    if (len(_audio_owners) >= _TEMP_AUDIO_MAX_FILES
+            or sum(owner.size for owner in _audio_owners.values()) + size > _TEMP_AUDIO_MAX_BYTES):
+        return None
+    # No await between admission and registration: concurrent requests cannot overbook.
+    audio_id = uuid.uuid4().hex[:12]
+    timer = asyncio.get_running_loop().call_later(
+        _TEMP_AUDIO_TTL, _expire_temp_audio, audio_id
+    )
+    _audio_owners[audio_id] = _AudioOwner(path, size)
+    _temp_audio[audio_id] = (path, timer)
+    return audio_id
+
+
+class _TemporaryAudioResponse(FileResponse):
+    """Keep capacity reserved through sending, including cancellation/range errors."""
+
+    def __init__(self, path: Path, audio_id: str):
+        super().__init__(path, media_type="audio/mpeg", filename="audio.mp3")
+        self.audio_id = audio_id
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            _release_temp_audio(self.audio_id)
 
 
 @router.get("/config")
@@ -56,10 +138,15 @@ async def get_config():
 @router.get("/temp-audio/{audio_id}")
 async def get_temp_audio(audio_id: str):
     """Serve temp audio file for browser Whisper fallback."""
-    path = _temp_audio.pop(audio_id, None)
-    if not path or not path.exists():
+    pending = _temp_audio.pop(audio_id, None)
+    if pending is None:
         raise HTTPException(404, "Audio not found or already downloaded")
-    return FileResponse(path, media_type="audio/mpeg", filename="audio.mp3")
+    path, timer = pending
+    timer.cancel()
+    if not path.is_file():
+        _release_temp_audio(audio_id)
+        raise HTTPException(404, "Audio not found or already downloaded")
+    return _TemporaryAudioResponse(path, audio_id)
 
 
 @router.get("/youtube-audio/{video_id}")
@@ -302,11 +389,11 @@ async def analyze_video_stream(req: AnalyzeRequest):
                         yield _sse_event("error", 0, f"Failed to download {platform} video")
                         return
 
-                    yield _sse_event("transcribing", 40, "Transcribing audio with Whisper...")
+                    audio_transferred = False
                     try:
+                        yield _sse_event("transcribing", 40, "Transcribing audio with Whisper...")
                         audio_data = audio_path.read_bytes()
-                        size_mb = len(audio_data) / (1024 * 1024)
-                        if size_mb > 25:
+                        if len(audio_data) > _MAX_TRANSCRIPTION_BYTES:
                             yield _sse_event("error", 0, "Audio too large (>25MB). Try a shorter video.")
                             return
                         result = await transcribe_with_groq(audio_data, f"{platform}_audio.m4a")
@@ -317,18 +404,20 @@ async def analyze_video_stream(req: AnalyzeRequest):
                     except RuntimeError as e:
                         msg = str(e)
                         if "GROQ_RATE_LIMIT" in msg or "Forbidden" in msg or "403" in msg:
-                            audio_id = uuid.uuid4().hex[:12]
-                            _temp_audio[audio_id] = audio_path
+                            audio_id = _offer_temp_audio(audio_path)
+                            if audio_id is None:
+                                # Refusal must not retain bytes while a slow client holds this yield.
+                                _remove_audio_file(audio_path)
+                                yield _sse_event("error", 0, "Browser transcription is busy. Please try again shortly.")
+                                return
+                            audio_transferred = True
                             yield _sse_event("groq_fallback", 45, "Server transcription unavailable. Switching to browser...", {"audio_url": f"/api/temp-audio/{audio_id}"})
                             return
                         yield _sse_event("error", 0, f"Transcription failed: {msg}")
                         return
                     finally:
-                        try:
-                            audio_path.unlink(missing_ok=True)
-                            audio_path.parent.rmdir()
-                        except OSError:
-                            pass
+                        if not audio_transferred:
+                            _remove_audio_file(audio_path)
 
             elif req.url and not platform:
                 # Article URL — extract text via trafilatura
